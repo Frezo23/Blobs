@@ -176,6 +176,20 @@ class Mushroom:
         screen.blit(self.image, (self.x * TILE_SIZE, self.y * TILE_SIZE))
 
 
+### SUGAR CANE ###
+
+class SugarCane:
+    """Sugar cane next to shallow water."""
+
+    def __init__(self, x, y, image):
+        self.x = x
+        self.y = y
+        self.image = image
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.x * TILE_SIZE, self.y * TILE_SIZE))
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -203,6 +217,8 @@ def main():
 
     MUSHROOM_IMAGE = load_sprite("tiles/mushroom_1.png")
 
+    SUGAR_CANE_IMAGE = load_sprite("tiles/sugar_cane_1.png")
+
     tree_raw = pygame.image.load("tiles/tree.png").convert_alpha()
     TREE_IMAGE = pygame.transform.scale(tree_raw, (TILE_SIZE, TILE_SIZE * 2))
 
@@ -226,25 +242,43 @@ def main():
     trees = []
     flowers = []
     mushrooms = []
+    sugarcanes = []
 
     occupied = set()  # tiles already occupied by ANY object
+
+    def is_next_to_shallow_water(x, y):
+        """Check 4-directionally if this tile touches SHALLOW_WATER."""
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx = x + dx
+            ny = y + dy
+            if 0 <= nx < MAP_WIDTH and 0 <= ny < MAP_HEIGHT:
+                if tile_map[ny][nx] == SHALLOW_WATER:
+                    return True
+        return False
 
     for y in range(MAP_HEIGHT):
         for x in range(MAP_WIDTH):
             tile = tile_map[y][x]
             pos = (x, y)
 
-            # ------ GRASS TILE ------
-            if tile == GRASS:
+            # ------ GRASS OR SAND TILE ------
+            if tile in (GRASS, SAND):
 
-                # BUSHES
-                if pos not in occupied and random.random() < 0.08:
-                    bushes.append(BerryBush(x, y))
-                    occupied.add(pos)
+                # BUSHES (grass only)
+                if tile == GRASS:
+                    if pos not in occupied and random.random() < 0.08:
+                        bushes.append(BerryBush(x, y))
+                        occupied.add(pos)
 
-                # FLOWERS
-                if pos not in occupied and random.random() < 0.10:
-                    flowers.append(Flower(x, y, random.choice(FLOWER_IMAGES)))
+                # FLOWERS (grass only)
+                if tile == GRASS:
+                    if pos not in occupied and random.random() < 0.10:
+                        flowers.append(Flower(x, y, random.choice(FLOWER_IMAGES)))
+                        occupied.add(pos)
+
+                # SUGAR CANE – can spawn on GRASS OR SAND next to SHALLOW_WATER
+                if pos not in occupied and is_next_to_shallow_water(x, y) and random.random() < 0.20:
+                    sugarcanes.append(SugarCane(x, y, SUGAR_CANE_IMAGE))
                     occupied.add(pos)
 
             # ------ FOREST TILE ------
@@ -286,6 +320,9 @@ def main():
 
         for mushroom in mushrooms:
             mushroom.draw(screen)
+
+        for cane in sugarcanes:
+            cane.draw(screen)
 
         # Draw bushes
         for bush in bushes:
