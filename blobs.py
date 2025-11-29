@@ -11,6 +11,8 @@ TILE_SIZE = 16
 SCREEN_WIDTH  = MAP_WIDTH * TILE_SIZE
 SCREEN_HEIGHT = MAP_HEIGHT * TILE_SIZE
 
+PANEL_WIDTH = 260  # extra space for side panel
+
 
 ### Tile Types:
 
@@ -153,10 +155,11 @@ class Tree:
 ### FLOWERS ###
 
 class Flower:
-    def __init__(self, x, y, image):
+    def __init__(self, x, y, image, kind_index):
         self.x = x
         self.y = y
         self.image = image
+        self.kind_index = kind_index  # 0 or 1
 
     def draw(self, screen):
         screen.blit(self.image, (self.x * TILE_SIZE, self.y * TILE_SIZE))
@@ -192,8 +195,10 @@ class SugarCane:
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
+    screen = pygame.display.set_mode((SCREEN_WIDTH + PANEL_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Blobs by Dominik Wilczewski")
+
+    FONT = pygame.font.SysFont(None, 18)
 
     TILE_IMAGES = {
         SHALLOW_WATER: load_tile("tiles/shallow_water.png"),
@@ -231,11 +236,17 @@ def main():
 
     flat = [tile for row in tile_map for tile in row]
 
-    print("\nBlobs by Dominik Wilczewski")
-    print("\nTile size:", str(TILE_SIZE) + "px")
-    print("World size:", str(MAP_WIDTH) + "x" + str(MAP_HEIGHT), "tiles")
-    print("\n  Forest:", flat.count(FOREST))
-    print("\nWorld Map Seed:", NOISE_SEED)
+    # tile counts
+    tile_counts = {
+        "Deep water":      flat.count(DEEP_WATER),
+        "Water":           flat.count(WATER),
+        "Shallow water":   flat.count(SHALLOW_WATER),
+        "Sand":            flat.count(SAND),
+        "Grass":           flat.count(GRASS),
+        "Forest":          flat.count(FOREST),
+    }
+
+    total_tiles = MAP_WIDTH * MAP_HEIGHT
 
     # ---- Spawn entities ----
     bushes = []
@@ -243,6 +254,9 @@ def main():
     flowers = []
     mushrooms = []
     sugarcanes = []
+
+    # for stats
+    flower_type_counts = [0, 0]  # index 0 -> flower_1, 1 -> flower_2
 
     occupied = set()  # tiles already occupied by ANY object
 
@@ -273,7 +287,10 @@ def main():
                 # FLOWERS (grass only)
                 if tile == GRASS:
                     if pos not in occupied and random.random() < 0.10:
-                        flowers.append(Flower(x, y, random.choice(FLOWER_IMAGES)))
+                        kind_index = random.randint(0, 1)
+                        img = FLOWER_IMAGES[kind_index]
+                        flowers.append(Flower(x, y, img, kind_index))
+                        flower_type_counts[kind_index] += 1
                         occupied.add(pos)
 
                 # SUGAR CANE – can spawn on GRASS OR SAND next to SHALLOW_WATER
@@ -294,6 +311,36 @@ def main():
                     mushrooms.append(Mushroom(x, y, MUSHROOM_IMAGE))
                     occupied.add(pos)
 
+    # precompute stats text lines (static because world doesn't change)
+    stats_lines = [
+        "World info:",
+        f"  Width: {MAP_WIDTH} tiles",
+        f"  Height: {MAP_HEIGHT} tiles",
+        f"  Tile size: {TILE_SIZE}px",
+        f"  Total tiles: {total_tiles}",
+        "",
+        "Tiles:",
+        f"  Deep water:   {tile_counts['Deep water']}",
+        f"  Water:        {tile_counts['Water']}",
+        f"  Shallow water:{tile_counts['Shallow water']}",
+        f"  Sand:         {tile_counts['Sand']}",
+        f"  Grass:        {tile_counts['Grass']}",
+        f"  Forest:       {tile_counts['Forest']}",
+        "",
+        "Objects:",
+        f"  Bushes:       {len(bushes)}",
+        f"  Trees:        {len(trees)}",
+        f"  Mushrooms:    {len(mushrooms)}",
+        f"  Sugar cane:   {len(sugarcanes)}",
+        "",
+        "Flowers:",
+        f"  Total:        {len(flowers)}",
+        f"  Flower 1:     {flower_type_counts[0]}",
+        f"  Flower 2:     {flower_type_counts[1]}",
+        "",
+        f"Seed: {NOISE_SEED}",
+    ]
+
     clock = pygame.time.Clock()
     running = True
 
@@ -308,6 +355,9 @@ def main():
         # Update berry bushes
         for bush in bushes:
             bush.update(dt)
+
+        # Clear main part
+        screen.fill((0, 0, 0))
 
         # Draw world tiles
         for y in range(MAP_HEIGHT):
@@ -331,6 +381,19 @@ def main():
         # Draw trees
         for tree in trees:
             tree.draw(screen)
+
+        # ---- Draw side panel ----
+        panel_x = SCREEN_WIDTH
+        pygame.draw.rect(screen, (30, 30, 40), (panel_x, 0, PANEL_WIDTH, SCREEN_HEIGHT))
+
+        y_offset = 10
+        for line in stats_lines:
+            color = (255, 255, 255)
+            if line.endswith(":") or "info" in line:
+                color = (255, 230, 120)  # headings a bit yellowish
+            text_surf = FONT.render(line, True, color)
+            screen.blit(text_surf, (panel_x + 10, y_offset))
+            y_offset += 20
 
         pygame.display.flip()
 
