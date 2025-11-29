@@ -26,7 +26,7 @@ ICE = 7
 
 ALL_TILES = [
     SHALLOW_WATER, WATER, DEEP_WATER,
-    SAND, GRASS
+    SAND, GRASS, FOREST
 ]
 
 def load_tile(path):
@@ -99,8 +99,10 @@ def height_to_tile(h):
         return SHALLOW_WATER
     elif h < 0.42:
         return SAND
-    else:
+    elif h < 0.8:
         return GRASS
+    else:
+        return FOREST
 
 
 ### BERRY BUSHES ###
@@ -138,6 +140,45 @@ class BerryBush:
         screen.blit(img, (self.x * TILE_SIZE, self.y * TILE_SIZE))
 
 
+### TREES ###
+
+class Tree:
+    """Tree is exactly 1 tile wide and 2 tiles tall."""
+
+    def __init__(self, x, y, image):
+        self.x = x      # tile coordinates
+        self.y = y
+        self.image = image
+        self.rect = self.image.get_rect()
+
+    def draw(self, screen):
+        # tile's top-left in pixels
+        base_x = self.x * TILE_SIZE
+        base_y = self.y * TILE_SIZE
+
+        # Tree is 2 tiles tall:
+        # bottom of tree must sit on this tile
+        # so we move it up by (tree_height - tile_size)
+        draw_x = base_x
+        draw_y = base_y - (self.rect.height - TILE_SIZE)
+
+        screen.blit(self.image, (draw_x, draw_y))
+
+
+### FLOWERS ###
+
+class Flower:
+    """Simple decorative flower on grass tile."""
+
+    def __init__(self, x, y, image):
+        self.x = x
+        self.y = y
+        self.image = image
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.x * TILE_SIZE, self.y * TILE_SIZE))
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -149,6 +190,7 @@ def main():
         DEEP_WATER:    load_tile("tiles/deep_water.png"),
         SAND:          load_tile("tiles/sand.png"),
         GRASS:         load_tile("tiles/grass.png"),
+        FOREST:        load_tile("tiles/forest.png"),
     }
 
     # Berry bush sprites for each stage (0, 1, 2)
@@ -157,6 +199,17 @@ def main():
         load_sprite("tiles/berry_bush_1.png"),
         load_sprite("tiles/berry_bush_2.png"),
     ]
+
+    # Flower sprite (single-stage, decorative)
+    # Flower sprites
+    FLOWER_IMAGES = [
+        load_sprite("tiles/flower_1.png"),
+        load_sprite("tiles/flower_2.png")
+    ]
+
+    # Tree image: 1 tile wide, 2 tiles tall
+    tree_raw = pygame.image.load("tiles/tree.png").convert_alpha()
+    TREE_IMAGE = pygame.transform.scale(tree_raw, (TILE_SIZE, TILE_SIZE * 2))
 
     # ---- Generate world ----
 
@@ -177,17 +230,33 @@ def main():
     print("  Shallow water:        ", flat.count(SHALLOW_WATER))
     print("  Sand:                 ", flat.count(SAND))
     print("  Grass:                ", flat.count(GRASS))
+    print("  Forest:               ", flat.count(FOREST))
     print("\n  Total number of tiles:", len(flat))
     print("\nWorld Map Seed:", NOISE_SEED)
 
-    # ---- Spawn berry bushes on GRASS tiles ----
+    # ---- Spawn entities ----
     bushes = []
+    trees = []
+    flowers = []
+
     for y in range(MAP_HEIGHT):
         for x in range(MAP_WIDTH):
-            if tile_map[y][x] == GRASS:
+            tile = tile_map[y][x]
+
+            if tile == GRASS:
                 # about 2% of grass tiles will have a bush
                 if random.random() < 0.02:
                     bushes.append(BerryBush(x, y))
+
+                # about 5% of grass tiles will have a flower
+                if random.random() < 0.05:
+                    flower_img = random.choice(FLOWER_IMAGES)
+                    flowers.append(Flower(x, y, flower_img))
+
+            elif tile == FOREST:
+                # about 60% of forest tiles will have a tree
+                if random.random() < 0.60:
+                    trees.append(Tree(x, y, TREE_IMAGE))
 
     clock = pygame.time.Clock()
     running = True
@@ -201,8 +270,6 @@ def main():
             if event.type == pygame.QUIT:
                 running = False
 
-            # example later: on key press, harvest bushes under player etc.
-
         # --- Update all bushes ---
         for bush in bushes:
             bush.update(dt)
@@ -214,9 +281,17 @@ def main():
                 img = TILE_IMAGES[tile_type]
                 screen.blit(img, (x * TILE_SIZE, y * TILE_SIZE))
 
+        # --- Draw flowers on grass ---
+        for flower in flowers:
+            flower.draw(screen)
+
         # --- Draw bushes on top of tiles ---
         for bush in bushes:
             bush.draw(screen, BERRY_BUSH_IMAGES)
+
+        # --- Draw trees (taller than one tile, anchored to one tile) ---
+        for tree in trees:
+            tree.draw(screen)
 
         pygame.display.flip()
 
@@ -225,4 +300,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-          
