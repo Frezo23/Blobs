@@ -89,7 +89,6 @@ def standardise_map(height_map):
 
 
 def height_to_tile(h):
-    """deepest level"""
 
     if h < 0.1:
         return DEEP_WATER
@@ -108,34 +107,26 @@ def height_to_tile(h):
 ### BERRY BUSHES ###
 
 class BerryBush:
-    """Bush with 3 stages: 0=no berries, 1=growing, 2=ready to harvest"""
-
     def __init__(self, x, y):
-        self.x = x  # tile coords
+        self.x = x  
         self.y = y
-        self.stage = 0      # 0, 1, 2
-        self.timer = 0.0    # seconds since last reset
+        self.stage = 0     
+        self.timer = 0.0    
 
     def update(self, dt):
-        """Grow over time. dt = seconds since last frame."""
         self.timer += dt
 
-        # You can tweak these times however you like:
-        # 0 -> 1 after 5 seconds, 1 -> 2 after 10 seconds
         if self.stage == 0 and self.timer > 5.0:
             self.stage = 1
         elif self.stage == 1 and self.timer > 10.0:
             self.stage = 2
 
     def harvest(self):
-        """Reset bush after harvesting berries (for later, with player interaction)."""
         if self.stage == 2:
-            # here you could add +1 to some berry counter
             self.stage = 0
             self.timer = 0.0
 
     def draw(self, screen, images):
-        """Draw bush using proper sprite for current stage."""
         img = images[self.stage]
         screen.blit(img, (self.x * TILE_SIZE, self.y * TILE_SIZE))
 
@@ -143,22 +134,16 @@ class BerryBush:
 ### TREES ###
 
 class Tree:
-    """Tree is exactly 1 tile wide and 2 tiles tall."""
-
     def __init__(self, x, y, image):
-        self.x = x      # tile coordinates
+        self.x = x     
         self.y = y
         self.image = image
         self.rect = self.image.get_rect()
 
     def draw(self, screen):
-        # tile's top-left in pixels
         base_x = self.x * TILE_SIZE
         base_y = self.y * TILE_SIZE
 
-        # Tree is 2 tiles tall:
-        # bottom of tree must sit on this tile
-        # so we move it up by (tree_height - tile_size)
         draw_x = base_x
         draw_y = base_y - (self.rect.height - TILE_SIZE)
 
@@ -168,7 +153,19 @@ class Tree:
 ### FLOWERS ###
 
 class Flower:
-    """Simple decorative flower on grass tile."""
+    def __init__(self, x, y, image):
+        self.x = x
+        self.y = y
+        self.image = image
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.x * TILE_SIZE, self.y * TILE_SIZE))
+
+
+### MUSHROOMS ###
+
+class Mushroom:
+    """Small decorative mushroom for forest tiles."""
 
     def __init__(self, x, y, image):
         self.x = x
@@ -193,21 +190,19 @@ def main():
         FOREST:        load_tile("tiles/forest.png"),
     }
 
-    # Berry bush sprites for each stage (0, 1, 2)
     BERRY_BUSH_IMAGES = [
         load_sprite("tiles/berry_bush_0.png"),
         load_sprite("tiles/berry_bush_1.png"),
         load_sprite("tiles/berry_bush_2.png"),
     ]
 
-    # Flower sprite (single-stage, decorative)
-    # Flower sprites
     FLOWER_IMAGES = [
         load_sprite("tiles/flower_1.png"),
         load_sprite("tiles/flower_2.png")
     ]
 
-    # Tree image: 1 tile wide, 2 tiles tall
+    MUSHROOM_IMAGE = load_sprite("tiles/mushroom_1.png")
+
     tree_raw = pygame.image.load("tiles/tree.png").convert_alpha()
     TREE_IMAGE = pygame.transform.scale(tree_raw, (TILE_SIZE, TILE_SIZE * 2))
 
@@ -218,78 +213,85 @@ def main():
     tile_map = [[height_to_tile(height_map[y][x]) for x in range(MAP_WIDTH)]
                 for y in range(MAP_HEIGHT)]
 
-    # ---- Count each tile type ----
     flat = [tile for row in tile_map for tile in row]
 
     print("\nBlobs by Dominik Wilczewski")
     print("\nTile size:", str(TILE_SIZE) + "px")
     print("World size:", str(MAP_WIDTH) + "x" + str(MAP_HEIGHT), "tiles")
-    print("\nWorld generated with:")
-    print("\n  Deep water:           ", flat.count(DEEP_WATER))
-    print("  Water:                ", flat.count(WATER))
-    print("  Shallow water:        ", flat.count(SHALLOW_WATER))
-    print("  Sand:                 ", flat.count(SAND))
-    print("  Grass:                ", flat.count(GRASS))
-    print("  Forest:               ", flat.count(FOREST))
-    print("\n  Total number of tiles:", len(flat))
+    print("\n  Forest:", flat.count(FOREST))
     print("\nWorld Map Seed:", NOISE_SEED)
 
     # ---- Spawn entities ----
     bushes = []
     trees = []
     flowers = []
+    mushrooms = []
+
+    occupied = set()  # tiles already occupied by ANY object
 
     for y in range(MAP_HEIGHT):
         for x in range(MAP_WIDTH):
             tile = tile_map[y][x]
+            pos = (x, y)
 
+            # ------ GRASS TILE ------
             if tile == GRASS:
-                # about 2% of grass tiles will have a bush
-                if random.random() < 0.02:
+
+                # BUSHES
+                if pos not in occupied and random.random() < 0.08:
                     bushes.append(BerryBush(x, y))
+                    occupied.add(pos)
 
-                # about 5% of grass tiles will have a flower
-                if random.random() < 0.05:
-                    flower_img = random.choice(FLOWER_IMAGES)
-                    flowers.append(Flower(x, y, flower_img))
+                # FLOWERS
+                if pos not in occupied and random.random() < 0.10:
+                    flowers.append(Flower(x, y, random.choice(FLOWER_IMAGES)))
+                    occupied.add(pos)
 
+            # ------ FOREST TILE ------
             elif tile == FOREST:
-                # about 60% of forest tiles will have a tree
-                if random.random() < 0.60:
+
+                # TREES
+                if pos not in occupied and random.random() < 0.60:
                     trees.append(Tree(x, y, TREE_IMAGE))
+                    occupied.add(pos)
+
+                # MUSHROOMS
+                if pos not in occupied and random.random() < 0.30:
+                    mushrooms.append(Mushroom(x, y, MUSHROOM_IMAGE))
+                    occupied.add(pos)
 
     clock = pygame.time.Clock()
     running = True
 
     while running:
 
-        # dt in seconds (also limits FPS to 60)
         dt = clock.tick(60) / 1000.0
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
 
-        # --- Update all bushes ---
+        # Update berry bushes
         for bush in bushes:
             bush.update(dt)
 
-        # --- Draw world ---
+        # Draw world tiles
         for y in range(MAP_HEIGHT):
             for x in range(MAP_WIDTH):
-                tile_type = tile_map[y][x]
-                img = TILE_IMAGES[tile_type]
-                screen.blit(img, (x * TILE_SIZE, y * TILE_SIZE))
+                screen.blit(TILE_IMAGES[tile_map[y][x]], (x * TILE_SIZE, y * TILE_SIZE))
 
-        # --- Draw flowers on grass ---
+        # Draw decorations
         for flower in flowers:
             flower.draw(screen)
 
-        # --- Draw bushes on top of tiles ---
+        for mushroom in mushrooms:
+            mushroom.draw(screen)
+
+        # Draw bushes
         for bush in bushes:
             bush.draw(screen, BERRY_BUSH_IMAGES)
 
-        # --- Draw trees (taller than one tile, anchored to one tile) ---
+        # Draw trees
         for tree in trees:
             tree.draw(screen)
 
