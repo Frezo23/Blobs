@@ -113,24 +113,4 @@ This keeps the world readable and avoids visual clutter or impossible positions.
 
 ```bash
 pip install pygame noise
-
-git clone https://github.com/yourusername/blobs-simulation.git
-cd blobs-simulation
-
-
-tiles/
-├── shallow_water.png
-├── water.png
-├── deep_water.png
-├── sand.png
-├── grass.png
-├── forest.png
-├── tree.png
-├── flower_1.png
-├── flower_2.png
-├── mushroom_1.png
-├── sugar_cane_1.png
-├── rock_1.png
-├── berry_bush_0.png
-├── berry_bush_1.png
-└── berry_bush_2.png
+```
