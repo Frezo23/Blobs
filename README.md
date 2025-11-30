@@ -263,15 +263,18 @@ python blobs.py
 
 ### v0.6
 
-* Genetics UI
-* Behavior tweaking panel
+* More bioms (Double Perlin Noise method)
 * Saving/loading world seeds
-* Exporting simulation data
+* Predator species
+* Species group forming
+* Better pathfinding algorithms for Blobs (A* algorithm)
 
 ### v0.7
 
-* Predator species
-* More complex resource system
+* More interactions with other objects (flowers, mushrooms, rocks and sugar cane)
+* Genetics UI
+* Behavior tweaking panel
+* Exporting simulation data
 
 ### v1.0
 
