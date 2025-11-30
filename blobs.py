@@ -207,6 +207,30 @@ class Rock:
         screen.blit(self.image, (self.x * TILE_SIZE, self.y * TILE_SIZE))
 
 
+### BLOBS ###
+
+class Blob:
+    """A blob creature with simple 2-frame arm animation."""
+
+    def __init__(self, x, y, frames):
+        self.x = x
+        self.y = y
+        self.frames = frames  # [idle, arms_up]
+        self.frame_index = 0
+        self.anim_timer = 0.0
+        self.anim_speed = 0.5  # seconds per frame, tweak as you like
+
+    def update(self, dt):
+        self.anim_timer += dt
+        if self.anim_timer >= self.anim_speed:
+            self.anim_timer -= self.anim_speed
+            self.frame_index = (self.frame_index + 1) % len(self.frames)
+
+    def draw(self, screen):
+        img = self.frames[self.frame_index]
+        screen.blit(img, (self.x * TILE_SIZE, self.y * TILE_SIZE))
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH + PANEL_WIDTH, SCREEN_HEIGHT))
@@ -237,6 +261,12 @@ def main():
     MUSHROOM_IMAGE = load_sprite("tiles/mushroom_1.png")
     SUGAR_CANE_IMAGE = load_sprite("tiles/sugar_cane_1.png")
     ROCK_IMAGE = load_sprite("tiles/rock_1.png")
+
+    # Blob animation frames (scaled to TILE_SIZE)
+    BLOB_FRAMES = [
+        load_sprite("blobs_characters/Blob_1.png"),  # idle
+        load_sprite("blobs_characters/Blob_2.png"),  # arms up
+    ]
 
     tree_raw = pygame.image.load("tiles/tree.png").convert_alpha()
     TREE_IMAGE = pygame.transform.scale(tree_raw, (TILE_SIZE, TILE_SIZE * 2))
@@ -269,6 +299,7 @@ def main():
     mushrooms = []
     sugarcanes = []
     rocks = []
+    blobs = []
 
     # for stats
     flower_type_counts = [0, 0]  # index 0 -> flower_1, 1 -> flower_2
@@ -293,6 +324,12 @@ def main():
             # ------ GRASS OR SAND TILE ------
             if tile in (GRASS, SAND):
 
+                # BLOBS (only on grass)
+                if tile == GRASS:
+                    if pos not in occupied and random.random() < 0.01:
+                        blobs.append(Blob(x, y, BLOB_FRAMES))
+                        occupied.add(pos)
+
                 # BUSHES (grass only)
                 if tile == GRASS:
                     if pos not in occupied and random.random() < 0.08:
@@ -313,7 +350,7 @@ def main():
                     sugarcanes.append(SugarCane(x, y, SUGAR_CANE_IMAGE))
                     occupied.add(pos)
 
-                # ROCKS – can spawn on GRASS or SAND and FOREST(generic)
+                # ROCKS – can spawn on GRASS or SAND
                 if pos not in occupied and random.random() < 0.05:
                     rocks.append(Rock(x, y, ROCK_IMAGE))
                     occupied.add(pos)
@@ -331,11 +368,12 @@ def main():
                     mushrooms.append(Mushroom(x, y, MUSHROOM_IMAGE))
                     occupied.add(pos)
 
-                # ROCKS – can spawn on GRASS or SAND and FOREST(generic)
+                # ROCKS – can spawn in forest too
                 if pos not in occupied and random.random() < 0.10:
                     rocks.append(Rock(x, y, ROCK_IMAGE))
                     occupied.add(pos)
                 
+                # BUSHES in forest
                 if pos not in occupied and random.random() < 0.08:
                     bushes.append(BerryBush(x, y))
                     occupied.add(pos)
@@ -357,6 +395,7 @@ def main():
         f"  Forest:       {tile_counts['Forest']}",
         "",
         "Objects:",
+        f"  Blobs:        {len(blobs)}",
         f"  Bushes:       {len(bushes)}",
         f"  Trees:        {len(trees)}",
         f"  Mushrooms:    {len(mushrooms)}",
@@ -385,6 +424,10 @@ def main():
         # Update berry bushes
         for bush in bushes:
             bush.update(dt)
+
+        # Update blobs (arm animation)
+        for blob in blobs:
+            blob.update(dt)
 
         # Clear main part
         screen.fill((0, 0, 0))
@@ -415,6 +458,10 @@ def main():
         for tree in trees:
             tree.draw(screen)
 
+        # Draw blobs (on top)
+        for blob in blobs:
+            blob.draw(screen)
+
         # ---- Draw side panel ----
         panel_x = SCREEN_WIDTH
         pygame.draw.rect(screen, (30, 30, 40), (panel_x, 0, PANEL_WIDTH, SCREEN_HEIGHT))
@@ -424,7 +471,7 @@ def main():
             color = (255, 255, 255)
             if line.endswith(":") or "info" in line:
                 color = (255, 230, 120)  # headings a bit yellowish
-            text_surf = pygame.font.SysFont(None, 18).render(line, True, color)
+            text_surf = FONT.render(line, True, color)
             screen.blit(text_surf, (panel_x + 10, y_offset))
             y_offset += 20
 
