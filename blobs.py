@@ -3,6 +3,9 @@ import random
 from noise import pnoise2
 import math
 
+DEBUG_SIGHT = True
+DEBUG_PATHS = True
+
 MAP_WIDTH = 60
 MAP_HEIGHT = 60
 
@@ -252,6 +255,7 @@ class Blob:
                  alive=True,
                  age=0,
                  gender=None,
+                 pregnant=False,
                  max_hp=100,
                  hunger=0.0,
                  thirst=0.0,
@@ -261,20 +265,20 @@ class Blob:
                  sight=None):
         self.x = x
         self.y = y
-        
+
         # smooth position in pixels
         self.px = x * TILE_SIZE
         self.py = y * TILE_SIZE
-        
+
         self.frames = frames  # [idle, arms_up]
         self.frame_index = 0
         self.anim_timer = 0.0
         self.anim_speed = 0.5  # seconds per frame
-        
+
         # -- BLOB STATS -- #
         self.alive = alive
         self.age = age
-        self.gender = gender if gender is not None else(random.randint(0,1))
+        self.gender = gender if gender is not None else random.randint(0, 1)
         self.max_hp = max_hp
         self.hp = max_hp
         self.hunger = hunger
@@ -282,113 +286,309 @@ class Blob:
         self.intelligence = intelligence if intelligence is not None else random.randint(1, 100)
         self.base_strength = strength if strength is not None else random.randint(1, 100)
         self.base_speed = speed if speed is not None else random.uniform(0.5, 3)
-        self.base_sight = sight if sight is not None else random.uniform(0.5, 5) ### radius of tiles that the blob can see
-        
-        self.hunger_rate = 2.0 ## how fast hunger increases
-        self.thirst_rate = 4.0
-        
+        self.base_sight = sight if sight is not None else random.uniform(4.0, 10.0)  # tiles
+
+        self.hunger_rate = 2.0   # how fast hunger increases
+        self.thirst_rate = 4.0   # how fast thirst increases
+
         self.speed = self.base_speed
         self.strength = self.base_strength
         self.sight = self.base_sight
-        
-        
-        ## -- BLOB MOVEMENT -- ##
+
+        # -- MOVEMENT -- #
         angle = random.uniform(0, 2 * math.pi)
         self.dir_x = math.cos(angle)
         self.dir_y = math.sin(angle)
-
-        # how often we change direction
         self.change_dir_cooldown = random.uniform(0.5, 2.0)
-    
+
+        # -- HARVESTING (FOOD) -- #
+        self.harvesting = False
+        self.harvest_target = None   # BerryBush
+        self.harvest_timer = 0.0     # seconds
+
+        # -- DRINKING (WATER) -- #
+        self.drinking = False
+        self.drink_timer = 0.0       # seconds
+
+        # -- DEBUG TARGETS -- #
+        self.current_food_target = None   # used for debug line to food
+        self.current_water_pos = None     # (x, y) tile for shallow water
+
+    # ---------- HELPERS ----------
+
     def can_walk_on(self, tile_type):
-        # Define walkable blocks
+        """Walkable tiles."""
         return tile_type in (GRASS, SAND, FOREST)
-    
+
     def pick_random_direction(self):
         """Pick a new random movement direction."""
         angle = random.uniform(0, 2 * math.pi)
         self.dir_x = math.cos(angle)
         self.dir_y = math.sin(angle)
         self.change_dir_cooldown = random.uniform(0.5, 2.0)
-            
-    def update(self, dt, tile_map):
+
+    def get_adjacent_shallow_water(self, tile_map):
+        """Return (x, y) of an adjacent SHALLOW_WATER tile, or None."""
+        for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+            nx = self.x + dx
+            ny = self.y + dy
+            if 0 <= nx < MAP_WIDTH and 0 <= ny < MAP_HEIGHT:
+                if tile_map[ny][nx] == SHALLOW_WATER:
+                    return (nx, ny)
+        return None
+
+    def is_next_to_shallow_water(self, tile_map):
+        """Backward-compatible helper, using get_adjacent_shallow_water."""
+        return self.get_adjacent_shallow_water(tile_map) is not None
+
+    def find_nearest_ripe_bush(self, bushes):
+        """Find nearest ripe bush within sight radius (in tiles)."""
+        best = None
+        best_dist2 = (self.sight ** 2)
+
+        for b in bushes:
+            if b.stage == 2:  # fully grown
+                dx = b.x - self.x
+                dy = b.y - self.y
+                dist2 = dx * dx + dy * dy
+                if dist2 <= best_dist2:
+                    best_dist2 = dist2
+                    best = b
+
+        return best
+
+    # ---------- UPDATE LOGIC ----------
+
+    def update(self, dt, tile_map, bushes):
+        # animation
         self.anim_timer += dt
         if self.anim_timer >= self.anim_speed:
             self.anim_timer -= self.anim_speed
             self.frame_index = (self.frame_index + 1) % len(self.frames)
-            
-        
+
+        # --- NEEDS / STATS --- #
         self.hunger = min(self.hunger + self.hunger_rate * dt, 100.0)
         self.thirst = min(self.thirst + self.thirst_rate * dt, 100.0)
-        
+
         if self.hunger > 80:
-            self.hp -= 5 * dt
-            
+            self.hp -= 2 * dt
         if self.thirst > 85:
-            self.hp -= 5 * dt
+            self.hp -= 2 * dt
         
+        if self.hunger < 20:
+            self.hp += 1 * dt
+        if self.thirst < 20:
+            self.hp += 1 * dt
+
         speed_factor = 1.0
         strength_factor = 1.0
         sight_factor = 1.0
 
         if self.hunger > 80:
-            speed_factor *= 1/1.5
-            strength_factor *= 1/2
-        
+            speed_factor *= 1 / 1.5
+            strength_factor *= 1 / 2
+
         if self.thirst > 70:
-            speed_factor *= 1/1.5
-            strength_factor *= 1/2
+            speed_factor *= 1 / 1.5
+            strength_factor *= 1 / 2
             
+        if self.thirst < 30:
+            speed_factor *= 1 * 1.1
+            strength_factor *= 1 * 2
+        
+        if self.hunger < 30:
+            speed_factor *= 1 * 1.1
+            strength_factor *= 1 * 2
+
         if self.hp < 40:
-            sight_factor *= 1/2
-            
+            sight_factor *= 1 / 2
+
         self.speed = self.base_speed * speed_factor
         self.strength = self.base_strength * strength_factor
         self.sight = self.base_sight * sight_factor
-        
-        self.hp = max(self.hp, 0)
-        
+
+        self.hp = max(0.0, min(self.hp, self.max_hp))
         if self.hp <= 0:
             self.alive = False
-            return # this prevents dead blobs from moving
+            return
 
+        # ---------- HARVESTING (1s stop on bush) ----------
+        if self.harvesting:
+            if (self.harvest_target is None or
+                self.harvest_target.stage != 2 or
+                self.x != self.harvest_target.x or
+                self.y != self.harvest_target.y):
+                # target invalid or we moved away
+                self.harvesting = False
+                self.harvest_target = None
+                self.harvest_timer = 0.0
+                self.current_food_target = None   # DEBUG
+            else:
+                self.harvest_timer += dt
+                if self.harvest_timer >= 1.0:  # 1 second to harvest
+                    self.harvest_target.harvest()
+                    self.hunger = max(0.0, self.hunger - 60.0)
+                    self.hp = min(self.max_hp, self.hp + 20.0)
+                    self.harvesting = False
+                    self.harvest_target = None
+                    self.harvest_timer = 0.0
+                    self.current_food_target = None   # DEBUG
+                    self.pick_random_direction()
+            return  # no movement while harvesting
 
-        # --- change direction from time to time ---
-        self.change_dir_cooldown -= dt
-        if self.change_dir_cooldown <= 0:
-            self.pick_random_direction()
+        # ---------- DRINKING (1s stop next to shallow water) ----------
+        if self.drinking:
+            # if no longer next to water or not thirsty -> cancel
+            if self.get_adjacent_shallow_water(tile_map) is None or self.thirst <= 0:
+                self.drinking = False
+                self.drink_timer = 0.0
+                self.current_water_pos = None
+            else:
+                self.drink_timer += dt
+                if self.drink_timer >= 1.0:  # 1 second to drink
+                    self.thirst = max(0.0, self.thirst - 70.0)
+                    self.hp = min(self.max_hp, self.hp + 10.0)
+                    self.drinking = False
+                    self.drink_timer = 0.0
+                    self.current_water_pos = None
+                    self.pick_random_direction()
+            return  # no movement while drinking
 
-        # --- continuous movement ---
-        # speed is in "tiles per second", multiply by TILE_SIZE for pixels
-        step = self.speed * dt * TILE_SIZE
+        # ---------- DECIDE WHAT TO DO (EAT / WANDER / DRINK) ----------
+
+        food_target = None
+        if self.hunger > 40:  # only bother looking if somewhat hungry
+            food_target = self.find_nearest_ripe_bush(bushes)
+            self.current_food_target = food_target   # DEBUG
+        else:
+            self.current_food_target = None
+
+        # check if we are already in a good place to drink
+        water_tile = None
+        if self.thirst > 40:
+            water_tile = self.get_adjacent_shallow_water(tile_map)
+
+        if self.thirst > 40 and water_tile is not None:
+            # start drinking now
+            self.drinking = True
+            self.drink_timer = 0.0
+            self.current_water_pos = water_tile   # DEBUG
+            return
+        else:
+            if not self.drinking:
+                self.current_water_pos = None
+
+        # pointer direction:
+        if food_target is not None:
+            # go towards bush
+            vx = (food_target.x * TILE_SIZE + TILE_SIZE / 2) - self.px
+            vy = (food_target.y * TILE_SIZE + TILE_SIZE / 2) - self.py
+            length = math.hypot(vx, vy)
+            if length > 0:
+                self.dir_x = vx / length
+                self.dir_y = vy / length
+                # keep change_dir_cooldown so we stick to the target
+        else:
+            # random wandering
+            self.change_dir_cooldown -= dt
+            if self.change_dir_cooldown <= 0:
+                self.pick_random_direction()
+
+        # ---------- CONTINUOUS MOVEMENT ----------
+
+        step = self.speed * dt * TILE_SIZE  # tiles/sec -> pixels/sec
 
         new_px = self.px + self.dir_x * step
         new_py = self.py + self.dir_y * step
 
-        # convert new position to tile indices
         tile_x = int(new_px // TILE_SIZE)
         tile_y = int(new_py // TILE_SIZE)
 
-        # check bounds and walkable tiles
+        # bounds & walkability
         if (0 <= tile_x < MAP_WIDTH and
             0 <= tile_y < MAP_HEIGHT and
             self.can_walk_on(tile_map[tile_y][tile_x])):
 
-            # accept move
+            # Accept move
             self.px = new_px
             self.py = new_py
             self.x = tile_x
             self.y = tile_y
+
+            # If we just reached a bush tile, start harvesting
+            if food_target is not None:
+                if (self.x == food_target.x and
+                    self.y == food_target.y and
+                    food_target.stage == 2):
+                    self.harvesting = True
+                    self.harvest_target = food_target
+                    self.harvest_timer = 0.0
+                    return
+
+            # If we are now next to shallow water and thirsty, start drinking
+            if self.thirst > 60 and self.is_next_to_shallow_water(tile_map):
+                self.drinking = True
+                self.drink_timer = 0.0
+                return
+
         else:
-            # hit border or non-walkable tile → pick new direction
+            # blocked → bounce off
             self.pick_random_direction()
+        
+        #print(self.thirst)
+        #print(self.hunger)
+        #print(self.hp,"\n")
 
     def draw(self, screen, cam_x, cam_y):
         if not self.alive:
             return
+
+        # screen position of sprite
         sx = self.px - cam_x * TILE_SIZE
         sy = self.py - cam_y * TILE_SIZE
+
+        # center of blob in screen coordinates
+        cx = int(sx + TILE_SIZE / 2)
+        cy = int(sy + TILE_SIZE / 2)
+
+        # --- draw blob sprite ---
         screen.blit(self.frames[self.frame_index], (sx, sy))
+
+        # --- DEBUG: sight radius ---
+        if DEBUG_SIGHT:
+            radius_px = int(self.sight * TILE_SIZE)
+            pygame.draw.circle(
+                screen,
+                (255, 10, 10),   # light blue
+                (cx, cy),
+                radius_px,
+                3                # outline only
+            )
+
+        # --- DEBUG: path to food (brown line) ---
+        if DEBUG_PATHS and self.current_food_target is not None:
+            fx = self.current_food_target.x * TILE_SIZE - cam_x * TILE_SIZE + TILE_SIZE / 2
+            fy = self.current_food_target.y * TILE_SIZE - cam_y * TILE_SIZE + TILE_SIZE / 2
+            pygame.draw.line(
+                screen,
+                (139, 69, 19),   # brown
+                (cx, cy),
+                (int(fx), int(fy)),
+                3
+            )
+
+        # --- DEBUG: path to water (blue line) ---
+        if DEBUG_PATHS and self.current_water_pos is not None:
+            wx, wy = self.current_water_pos
+            wx_px = wx * TILE_SIZE - cam_x * TILE_SIZE + TILE_SIZE / 2
+            wy_px = wy * TILE_SIZE - cam_y * TILE_SIZE + TILE_SIZE / 2
+            pygame.draw.line(
+                screen,
+                (80, 80, 255),   # blue
+                (cx, cy),
+                (int(wx_px), int(wy_px)),
+                3
+            )
 
 
 def main():
@@ -665,7 +865,7 @@ def main():
 
         # Update blobs (arm animation)
         for blob in blobs:
-            blob.update(dt, tile_map)
+            blob.update(dt, tile_map, bushes)
         
         blobs = [blob for blob in blobs if blob.alive]
 
