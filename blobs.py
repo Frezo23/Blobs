@@ -264,8 +264,8 @@ def main():
 
     # Blob animation frames (scaled to TILE_SIZE)
     BLOB_FRAMES = [
-        load_sprite("blobs_characters/Blob_1.png"),  # idle
-        load_sprite("blobs_characters/Blob_2.png"),  # arms up
+        load_sprite("tiles/Blob_1.png"),  # idle
+        load_sprite("tiles/Blob_2.png")  # arms up
     ]
 
     tree_raw = pygame.image.load("tiles/tree.png").convert_alpha()
