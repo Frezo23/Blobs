@@ -26,7 +26,8 @@ This project focuses on:
 
 ## 🖼️ Screenshot
 
-<img width="1120" height="800" alt="image" src="https://github.com/user-attachments/assets/16adee65-c189-433b-af9e-7e32c309c7d0" />
+<img width="1552" height="1291" alt="image" src="https://github.com/user-attachments/assets/d82b3ea2-5079-40ad-a94c-bd6fa8159f13" />
+
 
 ---
 
