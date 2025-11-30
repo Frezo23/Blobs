@@ -251,6 +251,9 @@ class Rock:
 class Blob:
     """A blob creature with simple 2-frame arm animation."""
 
+    EAT_RADIUS   = TILE_SIZE * 0.4   # how close to bush center to start harvesting
+    DRINK_RADIUS = TILE_SIZE * 0.4   # how close to water-tile center to start drinking
+
     def __init__(self, x, y, frames,
                  alive=True,
                  age=0,
@@ -301,48 +304,44 @@ class Blob:
         self.dir_y = math.sin(angle)
         self.change_dir_cooldown = random.uniform(0.5, 2.0)
 
-        # -- HARVESTING (FOOD) -- #
+        # -- FOOD / WATER STATES -- #
         self.harvesting = False
         self.harvest_target = None   # BerryBush
-        self.harvest_timer = 0.0     # seconds
+        self.harvest_timer = 0.0
 
-        # -- DRINKING (WATER) -- #
         self.drinking = False
-        self.drink_timer = 0.0       # seconds
+        self.drink_timer = 0.0
 
-        # -- DEBUG TARGETS -- #
-        self.current_food_target = None   # used for debug line to food
-        self.current_water_pos = None     # (x, y) tile for shallow water
+        self.food_target_tile = None   # (tx, ty) tile we want to reach for food
+        self.water_target_tile = None  # (tx, ty) tile we want to reach for water
+
+        # DEBUG
+        self.current_food_target = None   # BerryBush
+        self.current_water_pos = None     # (wx, wy)
 
     # ---------- HELPERS ----------
 
     def can_walk_on(self, tile_type):
-        """Walkable tiles."""
         return tile_type in (GRASS, SAND, FOREST)
 
     def pick_random_direction(self):
-        """Pick a new random movement direction."""
         angle = random.uniform(0, 2 * math.pi)
         self.dir_x = math.cos(angle)
         self.dir_y = math.sin(angle)
         self.change_dir_cooldown = random.uniform(0.5, 2.0)
 
-    def get_adjacent_shallow_water(self, tile_map):
-        """Return (x, y) of an adjacent SHALLOW_WATER tile, or None."""
+    def get_adjacent_shallow_water(self, tile_map, tx, ty):
+        """Return (wx, wy) of SHALLOW_WATER tile adjacent to (tx, ty), or None."""
         for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
-            nx = self.x + dx
-            ny = self.y + dy
+            nx = tx + dx
+            ny = ty + dy
             if 0 <= nx < MAP_WIDTH and 0 <= ny < MAP_HEIGHT:
                 if tile_map[ny][nx] == SHALLOW_WATER:
                     return (nx, ny)
         return None
 
-    def is_next_to_shallow_water(self, tile_map):
-        """Backward-compatible helper, using get_adjacent_shallow_water."""
-        return self.get_adjacent_shallow_water(tile_map) is not None
-
     def find_nearest_ripe_bush(self, bushes):
-        """Find nearest ripe bush within sight radius (in tiles)."""
+        """Find nearest ripe bush within sight radius (tiles)."""
         best = None
         best_dist2 = (self.sight ** 2)
 
@@ -357,16 +356,42 @@ class Blob:
 
         return best
 
+    def find_nearest_water_tile(self, tile_map):
+        """
+        Find nearest WALKABLE tile that is next to SHALLOW_WATER
+        within sight radius. Returns (tx, ty) or None.
+        """
+        best_tile = None
+        best_dist2 = (self.sight ** 2)
+
+        for ty in range(max(0, self.y - int(self.sight)),
+                        min(MAP_HEIGHT, self.y + int(self.sight) + 1)):
+            for tx in range(max(0, self.x - int(self.sight)),
+                            min(MAP_WIDTH, self.x + int(self.sight) + 1)):
+                if not self.can_walk_on(tile_map[ty][tx]):
+                    continue
+                if self.get_adjacent_shallow_water(tile_map, tx, ty) is None:
+                    continue
+
+                dx = tx - self.x
+                dy = ty - self.y
+                dist2 = dx * dx + dy * dy
+                if dist2 <= best_dist2:
+                    best_dist2 = dist2
+                    best_tile = (tx, ty)
+
+        return best_tile
+
     # ---------- UPDATE LOGIC ----------
 
     def update(self, dt, tile_map, bushes):
-        # animation
+        # --- animation ---
         self.anim_timer += dt
         if self.anim_timer >= self.anim_speed:
             self.anim_timer -= self.anim_speed
             self.frame_index = (self.frame_index + 1) % len(self.frames)
 
-        # --- NEEDS / STATS --- #
+        # --- needs / stats ---
         self.hunger = min(self.hunger + self.hunger_rate * dt, 100.0)
         self.thirst = min(self.thirst + self.thirst_rate * dt, 100.0)
 
@@ -374,7 +399,7 @@ class Blob:
             self.hp -= 2 * dt
         if self.thirst > 85:
             self.hp -= 2 * dt
-        
+
         if self.hunger < 20:
             self.hp += 1 * dt
         if self.thirst < 20:
@@ -391,17 +416,17 @@ class Blob:
         if self.thirst > 70:
             speed_factor *= 1 / 1.5
             strength_factor *= 1 / 2
-            
+
         if self.thirst < 30:
-            speed_factor *= 1 * 1.1
-            strength_factor *= 1 * 2
-        
+            speed_factor *= 1.1
+            strength_factor *= 2.0
+
         if self.hunger < 30:
-            speed_factor *= 1 * 1.1
-            strength_factor *= 1 * 2
+            speed_factor *= 1.1
+            strength_factor *= 2.0
 
         if self.hp < 40:
-            sight_factor *= 1 / 2
+            sight_factor *= 0.5
 
         self.speed = self.base_speed * speed_factor
         self.strength = self.base_strength * strength_factor
@@ -412,185 +437,188 @@ class Blob:
             self.alive = False
             return
 
-        # ---------- HARVESTING (1s stop on bush) ----------
+        # ---------- HARVESTING ----------
         if self.harvesting:
             if (self.harvest_target is None or
-                self.harvest_target.stage != 2 or
-                self.x != self.harvest_target.x or
-                self.y != self.harvest_target.y):
-                # target invalid or we moved away
+                self.harvest_target.stage != 2):
                 self.harvesting = False
                 self.harvest_target = None
                 self.harvest_timer = 0.0
-                self.current_food_target = None   # DEBUG
+                self.food_target_tile = None
+                self.current_food_target = None
             else:
                 self.harvest_timer += dt
-                if self.harvest_timer >= 1.0:  # 1 second to harvest
+                if self.harvest_timer >= 1.0:
                     self.harvest_target.harvest()
                     self.hunger = max(0.0, self.hunger - 60.0)
                     self.hp = min(self.max_hp, self.hp + 20.0)
                     self.harvesting = False
                     self.harvest_target = None
                     self.harvest_timer = 0.0
-                    self.current_food_target = None   # DEBUG
+                    self.food_target_tile = None
+                    self.current_food_target = None
                     self.pick_random_direction()
-            return  # no movement while harvesting
+            return  # no movement
 
-        # ---------- DRINKING (1s stop next to shallow water) ----------
+        # ---------- DRINKING ----------
         if self.drinking:
-            # if no longer next to water or not thirsty -> cancel
-            if self.get_adjacent_shallow_water(tile_map) is None or self.thirst <= 0:
+            # must still be at the water target tile
+            if self.water_target_tile is None:
                 self.drinking = False
                 self.drink_timer = 0.0
                 self.current_water_pos = None
             else:
-                self.drink_timer += dt
-                if self.drink_timer >= 1.0:  # 1 second to drink
-                    self.thirst = max(0.0, self.thirst - 70.0)
-                    self.hp = min(self.max_hp, self.hp + 10.0)
+                tx, ty = self.water_target_tile
+                target_cx = tx * TILE_SIZE + TILE_SIZE / 2
+                target_cy = ty * TILE_SIZE + TILE_SIZE / 2
+                dist = math.hypot(self.px - target_cx, self.py - target_cy)
+                if dist > self.DRINK_RADIUS or self.thirst <= 0:
+                    # moved away or not thirsty any more
                     self.drinking = False
                     self.drink_timer = 0.0
                     self.current_water_pos = None
-                    self.pick_random_direction()
-            return  # no movement while drinking
+                else:
+                    self.drink_timer += dt
+                    if self.drink_timer >= 1.0:
+                        self.thirst = max(0.0, self.thirst - 70.0)
+                        self.hp = min(self.max_hp, self.hp + 10.0)
+                        self.drinking = False
+                        self.drink_timer = 0.0
+                        self.current_water_pos = None
+                        self.water_target_tile = None
+                        self.pick_random_direction()
+            return  # no movement
 
-        # ---------- DECIDE WHAT TO DO (EAT / WANDER / DRINK) ----------
+        # ---------- DECISION: WATER VS FOOD VS WANDER ----------
 
+        # 1) choose food target
         food_target = None
-        if self.hunger > 40:  # only bother looking if somewhat hungry
+        if self.hunger > 40:
             food_target = self.find_nearest_ripe_bush(bushes)
-            self.current_food_target = food_target   # DEBUG
+            self.current_food_target = food_target
+            self.food_target_tile = (food_target.x, food_target.y) if food_target else None
         else:
             self.current_food_target = None
+            self.food_target_tile = None
 
-        # check if we are already in a good place to drink
-        water_tile = None
+        # 2) choose water target
+        water_target = None
         if self.thirst > 40:
-            water_tile = self.get_adjacent_shallow_water(tile_map)
-
-        if self.thirst > 40 and water_tile is not None:
-            # start drinking now
-            self.drinking = True
-            self.drink_timer = 0.0
-            self.current_water_pos = water_tile   # DEBUG
-            return
+            water_target = self.find_nearest_water_tile(tile_map)
+            self.water_target_tile = water_target
+            self.current_water_pos = water_target  # for debug line
         else:
-            if not self.drinking:
-                self.current_water_pos = None
+            self.water_target_tile = None
+            self.current_water_pos = None
 
-        # pointer direction:
-        if food_target is not None:
-            # go towards bush
-            vx = (food_target.x * TILE_SIZE + TILE_SIZE / 2) - self.px
-            vy = (food_target.y * TILE_SIZE + TILE_SIZE / 2) - self.py
+        # PRIORITY: if very thirsty, ignore food
+        target_mode = "wander"
+        target_cx = target_cy = None
+
+        if self.thirst >= 60 and water_target is not None:
+            tx, ty = water_target
+            target_cx = tx * TILE_SIZE + TILE_SIZE / 2
+            target_cy = ty * TILE_SIZE + TILE_SIZE / 2
+            target_mode = "water"
+        elif food_target is not None:
+            target_cx = food_target.x * TILE_SIZE + TILE_SIZE / 2
+            target_cy = food_target.y * TILE_SIZE + TILE_SIZE / 2
+            target_mode = "food"
+        elif water_target is not None:
+            tx, ty = water_target
+            target_cx = tx * TILE_SIZE + TILE_SIZE / 2
+            target_cy = ty * TILE_SIZE + TILE_SIZE / 2
+            target_mode = "water"
+        else:
+            target_mode = "wander"
+
+        # set direction towards target if we have one
+        if target_mode in ("food", "water"):
+            vx = target_cx - self.px
+            vy = target_cy - self.py
             length = math.hypot(vx, vy)
             if length > 0:
                 self.dir_x = vx / length
                 self.dir_y = vy / length
-                # keep change_dir_cooldown so we stick to the target
         else:
             # random wandering
             self.change_dir_cooldown -= dt
             if self.change_dir_cooldown <= 0:
                 self.pick_random_direction()
 
-        # ---------- CONTINUOUS MOVEMENT ----------
+        # ---------- MOVEMENT ----------
 
-        step = self.speed * dt * TILE_SIZE  # tiles/sec -> pixels/sec
-
+        step = self.speed * dt * TILE_SIZE
         new_px = self.px + self.dir_x * step
         new_py = self.py + self.dir_y * step
 
         tile_x = int(new_px // TILE_SIZE)
         tile_y = int(new_py // TILE_SIZE)
 
-        # bounds & walkability
         if (0 <= tile_x < MAP_WIDTH and
             0 <= tile_y < MAP_HEIGHT and
             self.can_walk_on(tile_map[tile_y][tile_x])):
 
-            # Accept move
             self.px = new_px
             self.py = new_py
             self.x = tile_x
             self.y = tile_y
 
-            # If we just reached a bush tile, start harvesting
-            if food_target is not None:
-                if (self.x == food_target.x and
-                    self.y == food_target.y and
-                    food_target.stage == 2):
+            # check if we reached food
+            if target_mode == "food" and food_target is not None:
+                target_cx = food_target.x * TILE_SIZE + TILE_SIZE / 2
+                target_cy = food_target.y * TILE_SIZE + TILE_SIZE / 2
+                dist = math.hypot(self.px - target_cx, self.py - target_cy)
+                if dist <= self.EAT_RADIUS and food_target.stage == 2:
                     self.harvesting = True
                     self.harvest_target = food_target
                     self.harvest_timer = 0.0
                     return
 
-            # If we are now next to shallow water and thirsty, start drinking
-            if self.thirst > 60 and self.is_next_to_shallow_water(tile_map):
-                self.drinking = True
-                self.drink_timer = 0.0
-                return
-
+            # check if we reached water tile
+            if target_mode == "water" and self.water_target_tile is not None:
+                tx, ty = self.water_target_tile
+                target_cx = tx * TILE_SIZE + TILE_SIZE / 2
+                target_cy = ty * TILE_SIZE + TILE_SIZE / 2
+                dist = math.hypot(self.px - target_cx, self.py - target_cy)
+                if dist <= self.DRINK_RADIUS and self.thirst > 0:
+                    self.drinking = True
+                    self.drink_timer = 0.0
+                    return
         else:
             # blocked → bounce off
             self.pick_random_direction()
-        
-        #print(self.thirst)
-        #print(self.hunger)
-        #print(self.hp,"\n")
 
     def draw(self, screen, cam_x, cam_y):
         if not self.alive:
             return
 
-        # screen position of sprite
         sx = self.px - cam_x * TILE_SIZE
         sy = self.py - cam_y * TILE_SIZE
 
-        # center of blob in screen coordinates
         cx = int(sx + TILE_SIZE / 2)
         cy = int(sy + TILE_SIZE / 2)
 
-        # --- draw blob sprite ---
+        # blob sprite
         screen.blit(self.frames[self.frame_index], (sx, sy))
 
-        # --- DEBUG: sight radius ---
+        # DEBUG: sight radius
         if DEBUG_SIGHT:
             radius_px = int(self.sight * TILE_SIZE)
-            pygame.draw.circle(
-                screen,
-                (255, 10, 10),   # light blue
-                (cx, cy),
-                radius_px,
-                3                # outline only
-            )
+            pygame.draw.circle(screen, (255, 10, 10), (cx, cy), radius_px, 2)
 
-        # --- DEBUG: path to food (brown line) ---
+        # DEBUG: path to food
         if DEBUG_PATHS and self.current_food_target is not None:
             fx = self.current_food_target.x * TILE_SIZE - cam_x * TILE_SIZE + TILE_SIZE / 2
             fy = self.current_food_target.y * TILE_SIZE - cam_y * TILE_SIZE + TILE_SIZE / 2
-            pygame.draw.line(
-                screen,
-                (139, 69, 19),   # brown
-                (cx, cy),
-                (int(fx), int(fy)),
-                3
-            )
+            pygame.draw.line(screen, (139, 69, 19), (cx, cy), (int(fx), int(fy)), 2)
 
-        # --- DEBUG: path to water (blue line) ---
+        # DEBUG: path to water
         if DEBUG_PATHS and self.current_water_pos is not None:
             wx, wy = self.current_water_pos
             wx_px = wx * TILE_SIZE - cam_x * TILE_SIZE + TILE_SIZE / 2
             wy_px = wy * TILE_SIZE - cam_y * TILE_SIZE + TILE_SIZE / 2
-            pygame.draw.line(
-                screen,
-                (80, 80, 255),   # blue
-                (cx, cy),
-                (int(wx_px), int(wy_px)),
-                3
-            )
-
-
+            pygame.draw.line(screen, (80, 80, 255), (cx, cy), (int(wx_px), int(wy_px)), 2)
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
