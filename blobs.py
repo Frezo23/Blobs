@@ -1,6 +1,7 @@
 import pygame
 import random
 from noise import pnoise2
+import math
 
 MAP_WIDTH = 60
 MAP_HEIGHT = 60
@@ -260,6 +261,11 @@ class Blob:
                  sight=None):
         self.x = x
         self.y = y
+        
+        # smooth position in pixels
+        self.px = x * TILE_SIZE
+        self.py = y * TILE_SIZE
+        
         self.frames = frames  # [idle, arms_up]
         self.frame_index = 0
         self.anim_timer = 0.0
@@ -275,7 +281,7 @@ class Blob:
         self.thirst = thirst
         self.intelligence = intelligence if intelligence is not None else random.randint(1, 100)
         self.base_strength = strength if strength is not None else random.randint(1, 100)
-        self.base_speed = speed if speed is not None else random.uniform(0.5, 10)
+        self.base_speed = speed if speed is not None else random.uniform(0.5, 3)
         self.base_sight = sight if sight is not None else random.uniform(0.5, 5) ### radius of tiles that the blob can see
         
         self.hunger_rate = 2.0 ## how fast hunger increases
@@ -285,7 +291,27 @@ class Blob:
         self.strength = self.base_strength
         self.sight = self.base_sight
         
-    def update(self, dt):
+        
+        ## -- BLOB MOVEMENT -- ##
+        angle = random.uniform(0, 2 * math.pi)
+        self.dir_x = math.cos(angle)
+        self.dir_y = math.sin(angle)
+
+        # how often we change direction
+        self.change_dir_cooldown = random.uniform(0.5, 2.0)
+    
+    def can_walk_on(self, tile_type):
+        # Define walkable blocks
+        return tile_type in (GRASS, SAND, FOREST)
+    
+    def pick_random_direction(self):
+        """Pick a new random movement direction."""
+        angle = random.uniform(0, 2 * math.pi)
+        self.dir_x = math.cos(angle)
+        self.dir_y = math.sin(angle)
+        self.change_dir_cooldown = random.uniform(0.5, 2.0)
+            
+    def update(self, dt, tile_map):
         self.anim_timer += dt
         if self.anim_timer >= self.anim_speed:
             self.anim_timer -= self.anim_speed
@@ -324,14 +350,45 @@ class Blob:
         
         if self.hp <= 0:
             self.alive = False
+            return # this prevents dead blobs from moving
+
+
+        # --- change direction from time to time ---
+        self.change_dir_cooldown -= dt
+        if self.change_dir_cooldown <= 0:
+            self.pick_random_direction()
+
+        # --- continuous movement ---
+        # speed is in "tiles per second", multiply by TILE_SIZE for pixels
+        step = self.speed * dt * TILE_SIZE
+
+        new_px = self.px + self.dir_x * step
+        new_py = self.py + self.dir_y * step
+
+        # convert new position to tile indices
+        tile_x = int(new_px // TILE_SIZE)
+        tile_y = int(new_py // TILE_SIZE)
+
+        # check bounds and walkable tiles
+        if (0 <= tile_x < MAP_WIDTH and
+            0 <= tile_y < MAP_HEIGHT and
+            self.can_walk_on(tile_map[tile_y][tile_x])):
+
+            # accept move
+            self.px = new_px
+            self.py = new_py
+            self.x = tile_x
+            self.y = tile_y
+        else:
+            # hit border or non-walkable tile → pick new direction
+            self.pick_random_direction()
 
     def draw(self, screen, cam_x, cam_y):
-        sx = self.x - cam_x
-        sy = self.y - cam_y
-        if not (0 <= sx < VIEW_TILES_X and 0 <= sy < VIEW_TILES_Y):
+        if not self.alive:
             return
-        img = self.frames[self.frame_index]
-        screen.blit(img, (sx * TILE_SIZE, sy * TILE_SIZE))
+        sx = self.px - cam_x * TILE_SIZE
+        sy = self.py - cam_y * TILE_SIZE
+        screen.blit(self.frames[self.frame_index], (sx, sy))
 
 
 def main():
@@ -608,7 +665,7 @@ def main():
 
         # Update blobs (arm animation)
         for blob in blobs:
-            blob.update(dt)
+            blob.update(dt, tile_map)
         
         blobs = [blob for blob in blobs if blob.alive]
 
@@ -669,12 +726,19 @@ def main():
 
         y_offset = 10
         for line in stats_lines:
-            color = (255, 255, 255)
-            if line.endswith(":") or "info" in line:
-                color = (255, 230, 120)  # headings a bit yellowish
-            text_surf = FONT.render(line, True, color)
+            
+            render_text = line
+            if line.strip().startswith("Blobs:"):
+                render_text = f"  Blobs:        {len(blobs)}"
+            
+            color = (255,255,255)
+            if render_text.endswith(":") or "info" in render_text:
+                color = (255,230,120)
+            
+            text_surf = FONT.render(render_text, True, color)
             screen.blit(text_surf, (panel_x + 10, y_offset))
             y_offset += 20
+                
 
         pygame.display.flip()
 
