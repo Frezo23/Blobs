@@ -6,6 +6,14 @@ from noise import pnoise2
 MAP_WIDTH = 40
 MAP_HEIGHT = 40
 
+import pygame
+import random
+import math
+from noise import pnoise2
+
+MAP_WIDTH = 40
+MAP_HEIGHT = 40
+
 TILE_SIZE = 16
 
 SCREEN_WIDTH  = MAP_WIDTH * TILE_SIZE
@@ -193,6 +201,20 @@ class SugarCane:
         screen.blit(self.image, (self.x * TILE_SIZE, self.y * TILE_SIZE))
 
 
+### ROCKS ###
+
+class Rock:
+    """Simple rock decoration/obstacle."""
+
+    def __init__(self, x, y, image):
+        self.x = x
+        self.y = y
+        self.image = image
+
+    def draw(self, screen):
+        screen.blit(self.image, (self.x * TILE_SIZE, self.y * TILE_SIZE))
+
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH + PANEL_WIDTH, SCREEN_HEIGHT))
@@ -221,8 +243,8 @@ def main():
     ]
 
     MUSHROOM_IMAGE = load_sprite("tiles/mushroom_1.png")
-
     SUGAR_CANE_IMAGE = load_sprite("tiles/sugar_cane_1.png")
+    ROCK_IMAGE = load_sprite("tiles/rock_1.png")
 
     tree_raw = pygame.image.load("tiles/tree.png").convert_alpha()
     TREE_IMAGE = pygame.transform.scale(tree_raw, (TILE_SIZE, TILE_SIZE * 2))
@@ -254,6 +276,7 @@ def main():
     flowers = []
     mushrooms = []
     sugarcanes = []
+    rocks = []
 
     # for stats
     flower_type_counts = [0, 0]  # index 0 -> flower_1, 1 -> flower_2
@@ -298,6 +321,11 @@ def main():
                     sugarcanes.append(SugarCane(x, y, SUGAR_CANE_IMAGE))
                     occupied.add(pos)
 
+                # ROCKS – can spawn on GRASS or SAND and FOREST(generic)
+                if pos not in occupied and random.random() < 0.05:
+                    rocks.append(Rock(x, y, ROCK_IMAGE))
+                    occupied.add(pos)
+
             # ------ FOREST TILE ------
             elif tile == FOREST:
 
@@ -309,6 +337,11 @@ def main():
                 # MUSHROOMS
                 if pos not in occupied and random.random() < 0.30:
                     mushrooms.append(Mushroom(x, y, MUSHROOM_IMAGE))
+                    occupied.add(pos)
+
+                # ROCKS – can spawn on GRASS or SAND and FOREST(generic)
+                if pos not in occupied and random.random() < 0.10:
+                    rocks.append(Rock(x, y, ROCK_IMAGE))
                     occupied.add(pos)
 
     # precompute stats text lines (static because world doesn't change)
@@ -332,6 +365,7 @@ def main():
         f"  Trees:        {len(trees)}",
         f"  Mushrooms:    {len(mushrooms)}",
         f"  Sugar cane:   {len(sugarcanes)}",
+        f"  Rocks:        {len(rocks)}",
         "",
         "Flowers:",
         f"  Total:        {len(flowers)}",
@@ -374,6 +408,9 @@ def main():
         for cane in sugarcanes:
             cane.draw(screen)
 
+        for rock in rocks:
+            rock.draw(screen)
+
         # Draw bushes
         for bush in bushes:
             bush.draw(screen, BERRY_BUSH_IMAGES)
@@ -391,7 +428,7 @@ def main():
             color = (255, 255, 255)
             if line.endswith(":") or "info" in line:
                 color = (255, 230, 120)  # headings a bit yellowish
-            text_surf = FONT.render(line, True, color)
+            text_surf = pygame.font.SysFont(None, 18).render(line, True, color)
             screen.blit(text_surf, (panel_x + 10, y_offset))
             y_offset += 20
 
