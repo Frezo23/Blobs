@@ -266,6 +266,7 @@ python blobs.py
 * Genetics UI
 * Behavior tweaking panel
 * Saving/loading world seeds
+* Exporting simulation data
 
 ### v0.7
 
