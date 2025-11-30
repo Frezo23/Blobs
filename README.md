@@ -1,128 +1,311 @@
-# 🌱 Blobs – Procedural World Generator (Evolution Simulation Base)
+🌱 B.L.O.B.S – Biological Lifeform Observation & Behavior Simulation
+Version 0.5.0 — First Creature-Based Release
+🧬 What “B.L.O.B.S” Stands For
 
-## 🧬 What Does “B.L.O.B.S” Stand For?
+B — Biological
+L — Lifeform
+O — Observation &
+B — Behavior
+S — Simulation
 
-**B.L.O.B.S** is an acronym describing the scientific purpose of the simulation:
+This project is a sandbox platform for studying emergent behavior, survival mechanics, aging, simple ecology, and early evolutionary traits in a procedural world.
 
-- **B — Biological**  
-- **L — Lifeform**  
-- **O — Observation &**  
-- **B — Behavior**  
-- **S — Simulation**  
+🎮 Overview
 
-This reflects the project's focus on observing lifeforms, ecosystems, and emergent biological behavior within a procedurally generated world.
-**Blobs** is a tile-based procedural world generator written in Python using **Pygame** and **Perlin noise**.  
-It creates a dynamic, resource-rich environment designed as the foundation for **evolution**, **AI behavior**, and **ecosystem simulations**.
+Blobs is a Python + Pygame simulation that generates a complete tile-based ecosystem with:
 
-This project focuses on:
-- Procedural terrain generation  
-- Environmental features  
-- Renewable resources  
-- Biomes and world diversity  
-- Simple plant life with growth mechanics  
-- An ideal base for creature evolution and emergent behaviors  
+Procedural terrain
 
----
+Renewable resources
 
-## 🖼️ Screenshot
+Autonomous blob creatures
 
-<img width="1552" height="1291" alt="image" src="https://github.com/user-attachments/assets/d82b3ea2-5079-40ad-a94c-bd6fa8159f13" />
+Survival needs (hunger, thirst, HP)
 
+Reproduction with genetics
 
----
+Aging and lifespan
 
-## 🚀 Features
+Debug tools for AI visualization
 
-### 🌍 Procedural Terrain Generation
+This version (v0.5.0) introduces a fully functional ecosystem where creatures interact with the world, reproduce, age, and die.
 
-The world is generated using **Perlin noise**, creating:
+It is now officially a life simulation — not just a terrain generator.
 
-- Deep water  
-- Water  
-- Shallow water  
-- Sand  
-- Grasslands  
-- Forests  
+🖼️ Screenshot
+<img width="1552" alt="image" src="https://github.com/user-attachments/assets/d82b3ea2-5079-40ad-a94c-bd6fa8159f13" />
+🌍 Features
+🗺️ Procedural Perlin-Noise Terrain
 
-Each biome influences which plants and objects can spawn there.
+Each world is generated using Perlin noise, producing natural landscapes:
 
----
+🌊 Deep water
 
-### 🌱 Plants & Resources
+💧 Water
 
-#### ✔ Berry Bushes (3 growth stages)
-- Stage 0: no berries  
-- Stage 1: growing  
-- Stage 2: ready to harvest  
-- Regrow automatically over time  
+🟦 Shallow water (drinkable by blobs)
 
-#### ✔ Flowers (2 types)
-- Decorative  
-- Spawn randomly on grass  
-- Each type is tracked separately in the HUD  
+🟨 Sand
 
-#### ✔ Mushrooms
-- Spawn in forest biomes  
-- Decorative forest resource  
+🟩 Grass
 
-#### ✔ Sugar Cane
-- Spawns **only on grass or sand next to shallow water**  
-- Cannot overlap with other objects  
+🌲 Forest
 
-#### ✔ Rocks
-- Spawn on **grass and sand**  
-- Act as obstacles / potential future resource nodes  
+Resources and objects spawn based on tile type for high biome realism.
 
----
+🌱 Flora & Natural Resources
+✔ Berry Bushes (3 stages)
 
-### 🌳 Trees
+Grow through stages 0 → 1 → 2
 
-- Occupy one tile on the grid  
-- Render at double height (2× tile size), visually “taller” than other sprites  
-- Can be used as obstacles, cover, or resource providers in future gameplay  
+Blobs can harvest stage 2
 
----
+Regrow after harvesting
 
-### 📊 Side Panel HUD
+Renewable food source
 
-A dedicated **right-side panel** displays world statistics:
+✔ Flowers (2 types)
 
-- Map width & height (in tiles)  
-- Tile size (in pixels)  
-- Total number of tiles  
-- Count of each tile type (deep water, water, shallow water, sand, grass, forest)  
-- Number of:
-  - Berry bushes  
-  - Trees  
-  - Mushrooms  
-  - Sugar cane  
-  - Rocks  
-  - Flowers (total + per flower type)  
-- World seed (for reproducible generations)
+Purely decorative
 
-Perfect for debugging generation parameters and for future evolution-sim telemetry.
+Counted separately in the HUD
 
----
+✔ Mushrooms (Forest only)
 
-### 🔥 No-Overlap System
+Decorative
 
-All world objects respect an `occupied` set to prevent overlapping on the same tile:
+Spawn densely in forests
 
-- Flowers  
-- Bushes  
-- Mushrooms  
-- Sugar cane  
-- Rocks  
-- Trees  
+✔ Sugar Cane (Water-edge biome)
 
-This keeps the world readable and avoids visual clutter or impossible positions.
+Only grows on grass/sand next to shallow water
 
----
+Cannot overlap other objects
 
-## 📦 Installation
+✔ Rocks
 
-### 1. Install dependencies
+Spawn on grass & sand
 
-```bash
+Act as obstacles
+
+Potential future mining resource
+
+🌳 Trees
+
+Double-tile height
+
+Add vertical depth to the world
+
+Spawn mainly in forests
+
+🤖 Blob Creatures (Main Feature)
+
+Each Blob is an autonomous agent with:
+
+🧠 AI & Needs
+
+Hunger
+
+Thirst
+
+HP
+
+Aging
+
+Behavior priorities (water > food > wander)
+
+Seek nearest valid food or water tile
+
+Smooth, non-grid movement
+
+🍓 Food Gathering
+
+Detects nearest ripe berry bush within sight radius
+
+Walks toward it
+
+Stops for 1 second to harvest
+
+Reduces hunger and restores HP
+
+💧 Water Drinking
+
+Can drink only from shallow water tiles
+
+Finds a walkable tile next to water
+
+Moves to tile
+
+Stops for 1 second to drink
+
+👁️ Dynamic Sight Radius
+
+Affected by:
+
+hunger
+
+thirst
+
+HP
+
+age
+
+Sight changes visually update in debug mode.
+
+👶 Reproduction (v0.5 update!)
+
+Blobs reproduce only when:
+
+Both partners are adults (age ≥ 20)
+
+Both are in good condition (low hunger/thirst, high HP)
+
+Both are close enough
+
+Both are off cooldown
+
+Reproduction includes genetic variation:
+
+intelligence
+
+strength
+
+speed
+
+sight
+
+lifespan
+
+Each attribute mutates slightly in the child.
+
+🧓 Aging & Death
+
+Blobs:
+
+age continuously
+
+lose stats after ~100
+
+suffer heavy penalties after 200
+
+die naturally at max_age
+
+can also die from starvation/dehydration
+
+🎨 Age-Based Visual Tint
+
+👶 Blue tint for blobs age ≤ 20
+
+👴 Red tint for blobs age ≥ 200
+
+Neutral color in between
+
+🧪 Debug Tools (Development Mode)
+
+Toggle in code:
+
+DEBUG_SIGHT = True
+DEBUG_PATHS = True
+
+🔵 Sight Radius Visualization
+
+Draws a circle around each blob showing vision.
+
+🟤 Food Path Lines
+
+Draws a brown line toward berry bush target.
+
+🔵 Water Path Lines
+
+Draws a blue line toward drinking target.
+
+Perfect for analyzing AI behavior and path selection.
+
+📊 Advanced Side Panel HUD
+
+The right-side panel now includes:
+
+🌍 World Info
+
+Map size
+
+Tile size
+
+Seed
+
+Tile counts
+
+Object counts
+
+🧓 Oldest Blob Stats
+
+Shows full diagnostic data of the oldest living blob:
+
+Age
+
+HP
+
+Hunger
+
+Thirst
+
+Sight
+
+Speed
+
+Strength
+
+Intelligence
+
+📈 Age Distribution Graphs
+
+Three auto-updating bar graphs:
+
+0–20 (young) — blue
+
+20–200 (adult) — gray
+
+200+ (elder) — red
+
+Great for analyzing seasonal population collapse or booms.
+
+🔄 No-Overlap World Generation
+
+All objects respect an occupied system preventing two objects from spawning in the same tile.
+
+This keeps the world clean and readable.
+
+📦 Installation
+1️⃣ Install dependencies
 pip install pygame noise
-```
+
+2️⃣ Run the simulation
+python blobs.py
+
+📝 Planned for Future Versions
+v0.6
+
+Genetics UI
+
+Behavior tweaking panel
+
+Saving/loading world seeds
+
+v0.7
+
+Predator species
+
+More complex resource system
+
+v1.0
+
+Full evolution simulation
+
+Multi-species ecosystem
+
+Mutation tracking graphs
+
+📜 License
+
+This project is released under the MIT License.
+All graphics created by Dominik Wilczewski — free to use with attribution.
