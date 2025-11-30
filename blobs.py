@@ -3,16 +3,8 @@ import random
 import math
 from noise import pnoise2
 
-MAP_WIDTH = 40
-MAP_HEIGHT = 40
-
-import pygame
-import random
-import math
-from noise import pnoise2
-
-MAP_WIDTH = 40
-MAP_HEIGHT = 40
+MAP_WIDTH = 60
+MAP_HEIGHT = 60
 
 TILE_SIZE = 16
 
@@ -342,6 +334,10 @@ def main():
                 # ROCKS – can spawn on GRASS or SAND and FOREST(generic)
                 if pos not in occupied and random.random() < 0.10:
                     rocks.append(Rock(x, y, ROCK_IMAGE))
+                    occupied.add(pos)
+                
+                if pos not in occupied and random.random() < 0.08:
+                    bushes.append(BerryBush(x, y))
                     occupied.add(pos)
 
     # precompute stats text lines (static because world doesn't change)
