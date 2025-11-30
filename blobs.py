@@ -3,8 +3,8 @@ import random
 from noise import pnoise2
 import math
 
-DEBUG_SIGHT = True
-DEBUG_PATHS = True
+DEBUG_SIGHT = False
+DEBUG_PATHS = False
 
 MAP_WIDTH = 60
 MAP_HEIGHT = 60
@@ -264,7 +264,8 @@ class Blob:
                  strength=None,
                  speed=None,
                  sight=None,
-                 max_age=None):   # <-- NEW: max_age
+                 max_age=None,
+                 repro_cooldown=0.0):
         self.x = x
         self.y = y
 
@@ -279,10 +280,7 @@ class Blob:
 
         # -- BLOB STATS -- #
         self.alive = alive
-        self.age = age                    # seconds of simulated life
-        self.max_age = (max_age if max_age is not None
-                        else random.uniform(120.0, 240.0))  # 2–4 minutes lifetime
-
+        self.age = age
         self.max_hp = max_hp
         self.hp = max_hp
         self.hunger = hunger
@@ -316,8 +314,14 @@ class Blob:
         self.food_target_tile = None   # (tx, ty) tile we want to reach for food
         self.water_target_tile = None  # (tx, ty) tile we want to reach for water
 
-        # reproduction cooldown (seconds)
-        self.repro_cooldown = random.uniform(10.0, 40.0)
+        # DEBUG
+        self.current_food_target = None   # BerryBush
+        self.current_water_pos = None     # (wx, wy)
+
+        # --- AGING / REPRODUCTION --- 
+        # if max_age not given, randomize a lifespan
+        self.max_age = max_age if max_age is not None else random.uniform(180.0, 260.0)
+        self.repro_cooldown = repro_cooldown
 
         # DEBUG
         self.current_food_target = None   # BerryBush
@@ -389,24 +393,23 @@ class Blob:
     # ---------- UPDATE LOGIC ----------
 
     def update(self, dt, tile_map, bushes):
-        """
-        Update blob. Returns a new Blob (offspring) or None.
-        """
-        offspring = None
-
-        # age & reproduction cooldown
-        self.age += dt
-        self.repro_cooldown = max(0.0, self.repro_cooldown - dt)
-
-        # OLD AGE: once past max_age, HP slowly decreases even if otherwise healthy
-        if self.age >= self.max_age:
-            self.hp -= 3.0 * dt   # tweak decay speed if you want
+        offspring = None  # <- important: default
 
         # --- animation ---
         self.anim_timer += dt
         if self.anim_timer >= self.anim_speed:
             self.anim_timer -= self.anim_speed
             self.frame_index = (self.frame_index + 1) % len(self.frames)
+
+        # --- reproduction cooldown & aging ---
+        if self.repro_cooldown > 0.0:
+            self.repro_cooldown -= dt
+
+        self.age += dt  # 1 age unit = 1 second of sim, tweak if you want slower aging
+
+        # old age death
+        if self.age >= self.max_age:
+            self.hp -= 1.0 * dt
 
         # --- needs / stats ---
         self.hunger = min(self.hunger + self.hunger_rate * dt, 100.0)
@@ -426,6 +429,7 @@ class Blob:
         strength_factor = 1.0
         sight_factor = 1.0
 
+        # --- penalties / buffs from hunger & thirst ---
         if self.hunger > 80:
             speed_factor *= 1 / 1.5
             strength_factor *= 1 / 2
@@ -445,10 +449,23 @@ class Blob:
         if self.hp < 40:
             sight_factor *= 0.5
 
+        # --- age-based stat changes ---
+        if 100 < self.age < 200:
+            speed_factor   *= 0.85
+            strength_factor *= 0.9
+            sight_factor   *= 0.8
+
+        if self.age >= 200:
+            speed_factor   *= 0.6
+            strength_factor *= 0.7
+            sight_factor   *= 0.5
+            self.hp -= 0.2 * dt  # extra old-age drain
+
         self.speed = self.base_speed * speed_factor
         self.strength = self.base_strength * strength_factor
         self.sight = self.base_sight * sight_factor
 
+        # clamp HP and check death
         self.hp = max(0.0, min(self.hp, self.max_hp))
         if self.hp <= 0:
             self.alive = False
@@ -479,7 +496,6 @@ class Blob:
 
         # ---------- DRINKING ----------
         if self.drinking:
-            # must still be at the water target tile
             if self.water_target_tile is None:
                 self.drinking = False
                 self.drink_timer = 0.0
@@ -490,7 +506,6 @@ class Blob:
                 target_cy = ty * TILE_SIZE + TILE_SIZE / 2
                 dist = math.hypot(self.px - target_cx, self.py - target_cy)
                 if dist > self.DRINK_RADIUS or self.thirst <= 0:
-                    # moved away or not thirsty any more
                     self.drinking = False
                     self.drink_timer = 0.0
                     self.current_water_pos = None
@@ -504,11 +519,10 @@ class Blob:
                         self.current_water_pos = None
                         self.water_target_tile = None
                         self.pick_random_direction()
-            return None  # no movement
+            return None
 
         # ---------- DECISION: WATER VS FOOD VS WANDER ----------
 
-        # 1) choose food target
         food_target = None
         if self.hunger > 40:
             food_target = self.find_nearest_ripe_bush(bushes)
@@ -518,17 +532,15 @@ class Blob:
             self.current_food_target = None
             self.food_target_tile = None
 
-        # 2) choose water target
         water_target = None
         if self.thirst > 40:
             water_target = self.find_nearest_water_tile(tile_map)
             self.water_target_tile = water_target
-            self.current_water_pos = water_target  # for debug line
+            self.current_water_pos = water_target
         else:
             self.water_target_tile = None
             self.current_water_pos = None
 
-        # PRIORITY: if very thirsty, ignore food
         target_mode = "wander"
         target_cx = target_cy = None
 
@@ -549,7 +561,6 @@ class Blob:
         else:
             target_mode = "wander"
 
-        # set direction towards target if we have one
         if target_mode in ("food", "water"):
             vx = target_cx - self.px
             vy = target_cy - self.py
@@ -558,7 +569,6 @@ class Blob:
                 self.dir_x = vx / length
                 self.dir_y = vy / length
         else:
-            # random wandering
             self.change_dir_cooldown -= dt
             if self.change_dir_cooldown <= 0:
                 self.pick_random_direction()
@@ -581,7 +591,6 @@ class Blob:
             self.x = tile_x
             self.y = tile_y
 
-            # check if we reached food
             if target_mode == "food" and food_target is not None:
                 target_cx = food_target.x * TILE_SIZE + TILE_SIZE / 2
                 target_cy = food_target.y * TILE_SIZE + TILE_SIZE / 2
@@ -592,7 +601,6 @@ class Blob:
                     self.harvest_timer = 0.0
                     return None
 
-            # check if we reached water tile
             if target_mode == "water" and self.water_target_tile is not None:
                 tx, ty = self.water_target_tile
                 target_cx = tx * TILE_SIZE + TILE_SIZE / 2
@@ -603,16 +611,14 @@ class Blob:
                     self.drink_timer = 0.0
                     return None
         else:
-            # blocked → bounce off
             self.pick_random_direction()
 
         # ---------- REPRODUCTION (asexual, with cooldown + adulthood) ----------
-        if self.repro_cooldown <= 0.0 and self.age > 20.0:  # must be "adult"
+        if self.repro_cooldown <= 0.0 and self.age > 20.0:
             if (self.hp > 0.8 * self.max_hp and
                 self.hunger < 25.0 and
                 self.thirst < 25.0):
-                # probability ~5% per second when conditions are met
-                if random.random() < 0.05 * dt:
+                if random.random() < 0.05 * dt:  # 5% per second
                     child_int   = max(1, min(100, int(self.intelligence + random.randint(-5, 5))))
                     child_str   = max(1, min(100, int(self.base_strength + random.randint(-5, 5))))
                     child_speed = max(0.1, self.base_speed + random.uniform(-0.3, 0.3))
@@ -629,11 +635,10 @@ class Blob:
                         strength=child_str,
                         speed=child_speed,
                         sight=child_sight,
-                        max_age=child_max_age
+                        max_age=child_max_age,
+                        repro_cooldown=20.0  # baby cooldown
                     )
-                    # cooldowns so they can't spam babies
-                    self.repro_cooldown = 30.0      # parent waits 30 seconds
-                    offspring.repro_cooldown = 20.0  # baby waits before can reproduce
+                    self.repro_cooldown = 30.0
 
         return offspring
 
@@ -1038,7 +1043,7 @@ def main():
             y_offset += 20
 
         # --- Oldest blob detailed info ---
-        if blobs:
+        if blobs:  # only if at least one alive
             oldest = max(blobs, key=lambda b: b.age)
 
             y_offset += 10  # small gap
@@ -1062,8 +1067,8 @@ def main():
             bl(f"Speed base: {oldest.base_speed:.2f}")
             bl(f"Strength:   {oldest.strength:.1f}")
             bl(f"Intelligence:{oldest.intelligence}")
-
-            # --- Age distribution graphs ---
+            
+             # --- Age distribution graphs ---
             y_offset += 10  # small gap below stats
 
             title = FONT.render("Age distribution:", True, (255, 230, 120))
@@ -1104,7 +1109,6 @@ def main():
             draw_age_bar("20–200", adult_count, (180, 180, 180))
             # elder (200+): red
             draw_age_bar("200+", elder_count, (255, 120, 120))
-                
 
         pygame.display.flip()
 
