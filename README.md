@@ -1,5 +1,16 @@
 # 🌱 Blobs – Procedural World Generator (Evolution Simulation Base)
 
+## 🧬 What Does “B.L.O.B.S” Stand For?
+
+**B.L.O.B.S** is an acronym describing the scientific purpose of the simulation:
+
+- **B — Biological**  
+- **L — Lifeform**  
+- **O — Observation &**  
+- **B — Behavior**  
+- **S — Simulation**  
+
+This reflects the project's focus on observing lifeforms, ecosystems, and emergent biological behavior within a procedurally generated world.
 **Blobs** is a tile-based procedural world generator written in Python using **Pygame** and **Perlin noise**.  
 It creates a dynamic, resource-rich environment designed as the foundation for **evolution**, **AI behavior**, and **ecosystem simulations**.
 
