@@ -253,6 +253,8 @@ class Blob:
 
     EAT_RADIUS   = TILE_SIZE * 0.4   # how close to bush center to start harvesting
     DRINK_RADIUS = TILE_SIZE * 0.4   # how close to water-tile center to start drinking
+    
+    ADULT_AGE    = 20.0
 
     def __init__(self, x, y, frames,
                  alive=True,
@@ -394,17 +396,16 @@ class Blob:
         """
         Find nearest suitable mate within sight.
         Conditions:
-        - other is not self
-        - both are alive, adult, off cooldown
-        - both are healthy enough (hp high, hunger/thirst low)
-        - within sight radius (in tiles)
+        - both are adults (age >= ADULT_AGE)
+        - both reproduction cooldown <= 0
+        - both healthy enough (hp > 60% max, hunger & thirst < 50)
         """
-        if self.repro_cooldown > 0.0 or self.age <= 20.0:
+        if self.repro_cooldown > 0.0 or self.age < self.ADULT_AGE:
             return None
 
-        if not (self.hp > 0.8 * self.max_hp and
-                self.hunger < 25.0 and
-                self.thirst < 25.0):
+        if not (self.hp > 0.6 * self.max_hp and
+                self.hunger < 50.0 and
+                self.thirst  < 50.0):
             return None
 
         best = None
@@ -414,14 +415,12 @@ class Blob:
             if other is self or not other.alive:
                 continue
 
-            # mate must be adult and off cooldown
-            if other.repro_cooldown > 0.0 or other.age <= 20.0:
+            if other.repro_cooldown > 0.0 or other.age < self.ADULT_AGE:
                 continue
 
-            # mate must also be healthy
-            if not (other.hp > 0.8 * other.max_hp and
-                    other.hunger < 25.0 and
-                    other.thirst < 25.0):
+            if not (other.hp > 0.6 * other.max_hp and
+                    other.hunger < 50.0 and
+                    other.thirst  < 50.0):
                 continue
 
             dx = other.x - self.x
@@ -586,10 +585,11 @@ class Blob:
             self.water_target_tile = None
             self.current_water_pos = None
 
-        # 3) MATE (only if not too hungry/thirsty)
+        # 3) MATE (now easier to consider)
         mate_target = None
-        if (self.hunger < 40 and self.thirst < 40 and
-            self.repro_cooldown <= 0.0 and self.age > 20.0):
+        # if not in critical hunger/thirst, and cooldown ready -> look for mate
+        if (self.hunger < 60 and self.thirst < 60 and
+            self.repro_cooldown <= 0.0 and self.age > 10.0):
             mate_target = self.find_nearest_mate(all_blobs)
 
         target_mode = "wander"
@@ -598,9 +598,9 @@ class Blob:
         # PRIORITY:
         # 1) Critical thirst -> water
         # 2) Hungry -> food
-        # 3) If ok, and mate available -> mate
+        # 3) If ok and mate available -> mate
         # 4) Else water if available
-        if self.thirst >= 60 and water_target is not None:
+        if self.thirst >= 70 and water_target is not None:
             tx, ty = water_target
             target_cx = tx * TILE_SIZE + TILE_SIZE / 2
             target_cy = ty * TILE_SIZE + TILE_SIZE / 2
@@ -675,56 +675,40 @@ class Blob:
         else:
             self.pick_random_direction()
 
-        # ---------- REPRODUCTION (asexual, with cooldown + adulthood) ----------
-        if self.repro_cooldown <= 0.0 and self.age > 20.0:
-            # self must be healthy enough
-            if (self.hp > 0.8 * self.max_hp and
-                self.hunger < 25.0 and
-                self.thirst < 25.0):
+        # ---------- REPRODUCTION (pair-based, adults only, slower) ----------
+        # Happens AFTER movement; offspring appears only if a mate is in a neighbouring tile.
+        if self.repro_cooldown <= 0.0 and self.age >= self.ADULT_AGE:
+            if (self.hp > 0.7 * self.max_hp and
+                self.hunger < 50.0 and
+                self.thirst < 50.0):
 
+                # find an ADULT mate in 8-neighbourhood
                 mate = None
                 for other in all_blobs:
                     if other is self or not other.alive:
                         continue
-                    # mate must also be adult and off cooldown
-                    if other.repro_cooldown > 0.0 or other.age <= 20.0:
+                    if other.repro_cooldown > 0.0 or other.age < self.ADULT_AGE:
                         continue
-                    # mate must also be healthy enough
-                    if (other.hp <= 0.8 * other.max_hp or
-                        other.hunger >= 25.0 or
-                        other.thirst >= 25.0):
+                    if not (other.hp > 0.7 * other.max_hp and
+                            other.hunger < 50.0 and
+                            other.thirst < 50.0):
                         continue
-                    # must stand next to each other (8-neighbourhood)
+
                     if abs(other.x - self.x) <= 1 and abs(other.y - self.y) <= 1:
                         mate = other
                         break
 
                 if mate is not None:
-                    # small probability per second while together & healthy
+                    # Slower reproduction:
+                    # 0.05 * dt ≈ 5% per second while standing next to a valid mate
                     if random.random() < 0.05 * dt:
-                        # combine "genes" (average + small mutation)
-                        child_int = max(
-                            1,
-                            min(100, int((self.intelligence + mate.intelligence) / 2 + random.randint(-5, 5)))
-                        )
-                        child_str = max(
-                            1,
-                            min(100, int((self.base_strength + mate.base_strength) / 2 + random.randint(-5, 5)))
-                        )
-                        child_speed = max(
-                            0.1,
-                            (self.base_speed + mate.base_speed) / 2 + random.uniform(-0.2, 0.2)
-                        )
-                        child_sight = max(
-                            1.0,
-                            (self.base_sight + mate.base_sight) / 2 + random.uniform(-0.3, 0.3)
-                        )
-                        child_max_age = max(
-                            30.0,
-                            (self.max_age + mate.max_age) / 2 + random.uniform(-20.0, 20.0)
-                        )
+                        # child traits: average + small mutation
+                        child_int   = max(1, min(100, int((self.intelligence + mate.intelligence) / 2 + random.randint(-3, 3))))
+                        child_str   = max(1, min(100, int((self.base_strength + mate.base_strength) / 2 + random.randint(-3, 3))))
+                        child_speed = max(0.1, (self.base_speed + mate.base_speed) / 2 + random.uniform(-0.15, 0.15))
+                        child_sight = max(1.0, (self.base_sight + mate.base_sight) / 2 + random.uniform(-0.3, 0.3))
+                        child_max_age = max(30.0, (self.max_age + mate.max_age) / 2 + random.uniform(-10.0, 10.0))
 
-                        # spawn baby at parent's tile
                         offspring = Blob(
                             self.x, self.y, self.frames,
                             age=0.0,
@@ -736,12 +720,15 @@ class Blob:
                             speed=child_speed,
                             sight=child_sight,
                             max_age=child_max_age,
-                            repro_cooldown=20.0  # baby cooldown
+                            # big cooldown: even if it hits adult age, it must wait
+                            repro_cooldown=60.0
                         )
 
-                        # both parents go on cooldown
-                        self.repro_cooldown = 30.0
-                        mate.repro_cooldown = 30.0
+                        # Parents: longish cooldowns
+                        self.repro_cooldown = 45.0
+                        mate.repro_cooldown = 45.0
+
+                        return offspring
 
         return offspring
 
