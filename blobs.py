@@ -256,16 +256,15 @@ class Blob:
 
     def __init__(self, x, y, frames,
                  alive=True,
-                 age=0,
-                 gender=None,
-                 pregnant=False,
+                 age=0.0,
                  max_hp=100,
                  hunger=0.0,
                  thirst=0.0,
                  intelligence=None,
                  strength=None,
                  speed=None,
-                 sight=None):
+                 sight=None,
+                 max_age=None):   # <-- NEW: max_age
         self.x = x
         self.y = y
 
@@ -280,8 +279,10 @@ class Blob:
 
         # -- BLOB STATS -- #
         self.alive = alive
-        self.age = age
-        self.gender = gender if gender is not None else random.randint(0, 1)
+        self.age = age                    # seconds of simulated life
+        self.max_age = (max_age if max_age is not None
+                        else random.uniform(120.0, 240.0))  # 2–4 minutes lifetime
+
         self.max_hp = max_hp
         self.hp = max_hp
         self.hunger = hunger
@@ -314,6 +315,9 @@ class Blob:
 
         self.food_target_tile = None   # (tx, ty) tile we want to reach for food
         self.water_target_tile = None  # (tx, ty) tile we want to reach for water
+
+        # reproduction cooldown (seconds)
+        self.repro_cooldown = random.uniform(10.0, 40.0)
 
         # DEBUG
         self.current_food_target = None   # BerryBush
@@ -385,6 +389,19 @@ class Blob:
     # ---------- UPDATE LOGIC ----------
 
     def update(self, dt, tile_map, bushes):
+        """
+        Update blob. Returns a new Blob (offspring) or None.
+        """
+        offspring = None
+
+        # age & reproduction cooldown
+        self.age += dt
+        self.repro_cooldown = max(0.0, self.repro_cooldown - dt)
+
+        # OLD AGE: once past max_age, HP slowly decreases even if otherwise healthy
+        if self.age >= self.max_age:
+            self.hp -= 3.0 * dt   # tweak decay speed if you want
+
         # --- animation ---
         self.anim_timer += dt
         if self.anim_timer >= self.anim_speed:
@@ -435,7 +452,7 @@ class Blob:
         self.hp = max(0.0, min(self.hp, self.max_hp))
         if self.hp <= 0:
             self.alive = False
-            return
+            return None
 
         # ---------- HARVESTING ----------
         if self.harvesting:
@@ -458,7 +475,7 @@ class Blob:
                     self.food_target_tile = None
                     self.current_food_target = None
                     self.pick_random_direction()
-            return  # no movement
+            return None  # no movement
 
         # ---------- DRINKING ----------
         if self.drinking:
@@ -487,7 +504,7 @@ class Blob:
                         self.current_water_pos = None
                         self.water_target_tile = None
                         self.pick_random_direction()
-            return  # no movement
+            return None  # no movement
 
         # ---------- DECISION: WATER VS FOOD VS WANDER ----------
 
@@ -573,7 +590,7 @@ class Blob:
                     self.harvesting = True
                     self.harvest_target = food_target
                     self.harvest_timer = 0.0
-                    return
+                    return None
 
             # check if we reached water tile
             if target_mode == "water" and self.water_target_tile is not None:
@@ -584,10 +601,41 @@ class Blob:
                 if dist <= self.DRINK_RADIUS and self.thirst > 0:
                     self.drinking = True
                     self.drink_timer = 0.0
-                    return
+                    return None
         else:
             # blocked → bounce off
             self.pick_random_direction()
+
+        # ---------- REPRODUCTION (asexual, with cooldown + adulthood) ----------
+        if self.repro_cooldown <= 0.0 and self.age > 20.0:  # must be "adult"
+            if (self.hp > 0.8 * self.max_hp and
+                self.hunger < 25.0 and
+                self.thirst < 25.0):
+                # probability ~5% per second when conditions are met
+                if random.random() < 0.05 * dt:
+                    child_int   = max(1, min(100, int(self.intelligence + random.randint(-5, 5))))
+                    child_str   = max(1, min(100, int(self.base_strength + random.randint(-5, 5))))
+                    child_speed = max(0.1, self.base_speed + random.uniform(-0.3, 0.3))
+                    child_sight = max(1.0, self.base_sight + random.uniform(-0.5, 0.5))
+                    child_max_age = max(30.0, self.max_age + random.uniform(-20.0, 20.0))
+
+                    offspring = Blob(
+                        self.x, self.y, self.frames,
+                        age=0.0,
+                        max_hp=self.max_hp,
+                        hunger=0.0,
+                        thirst=0.0,
+                        intelligence=child_int,
+                        strength=child_str,
+                        speed=child_speed,
+                        sight=child_sight,
+                        max_age=child_max_age
+                    )
+                    # cooldowns so they can't spam babies
+                    self.repro_cooldown = 30.0      # parent waits 30 seconds
+                    offspring.repro_cooldown = 20.0  # baby waits before can reproduce
+
+        return offspring
 
     def draw(self, screen, cam_x, cam_y):
         if not self.alive:
@@ -599,26 +647,41 @@ class Blob:
         cx = int(sx + TILE_SIZE / 2)
         cy = int(sy + TILE_SIZE / 2)
 
-        # blob sprite
-        screen.blit(self.frames[self.frame_index], (sx, sy))
+        # base sprite
+        img = self.frames[self.frame_index]
 
-        # DEBUG: sight radius
+        # ----- AGE-BASED TINT -----
+        frame_to_draw = img
+        if self.age <= 20:
+            tinted = img.copy()
+            # alpha = 255 so it stays visible
+            tinted.fill((100, 200, 255, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            frame_to_draw = tinted
+        elif self.age >= 200:
+            tinted = img.copy()
+            tinted.fill((255, 120, 120, 255), special_flags=pygame.BLEND_RGBA_MULT)
+            frame_to_draw = tinted
+
+        # draw blob
+        screen.blit(frame_to_draw, (sx, sy))
+
+        # ----- DEBUG SIGHT -----
         if DEBUG_SIGHT:
             radius_px = int(self.sight * TILE_SIZE)
             pygame.draw.circle(screen, (255, 10, 10), (cx, cy), radius_px, 2)
 
-        # DEBUG: path to food
+        # ----- DEBUG PATHS -----
         if DEBUG_PATHS and self.current_food_target is not None:
             fx = self.current_food_target.x * TILE_SIZE - cam_x * TILE_SIZE + TILE_SIZE / 2
             fy = self.current_food_target.y * TILE_SIZE - cam_y * TILE_SIZE + TILE_SIZE / 2
             pygame.draw.line(screen, (139, 69, 19), (cx, cy), (int(fx), int(fy)), 2)
 
-        # DEBUG: path to water
         if DEBUG_PATHS and self.current_water_pos is not None:
             wx, wy = self.current_water_pos
             wx_px = wx * TILE_SIZE - cam_x * TILE_SIZE + TILE_SIZE / 2
             wy_px = wy * TILE_SIZE - cam_y * TILE_SIZE + TILE_SIZE / 2
             pygame.draw.line(screen, (80, 80, 255), (cx, cy), (int(wx_px), int(wy_px)), 2)
+            
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
@@ -794,6 +857,7 @@ def main():
         "",
         "Objects:",
         f"  Blobs:        {len(blobs)}",
+        f"  Oldest blob:",
         f"  Bushes:       {len(bushes)}",
         f"  Trees:        {len(trees)}",
         f"  Mushrooms:    {len(mushrooms)}",
@@ -891,11 +955,16 @@ def main():
         for bush in bushes:
             bush.update(dt)
 
-        # Update blobs (arm animation)
+        # Update blobs and collect newly born ones
+        new_blobs = []
         for blob in blobs:
-            blob.update(dt, tile_map, bushes)
-        
+            baby = blob.update(dt, tile_map, bushes)
+            if baby is not None:
+                new_blobs.append(baby)
+
+        # remove dead blobs and add babies
         blobs = [blob for blob in blobs if blob.alive]
+        blobs.extend(new_blobs)
 
         # Clear whole window
         screen.fill((0, 0, 0))
@@ -950,22 +1019,91 @@ def main():
         # ---- Draw side panel ----
         panel_x = VIEW_WIDTH + SCROLLBAR_THICK
         pygame.draw.rect(screen, (30, 30, 40),
-                         (panel_x, 0, PANEL_WIDTH, WINDOW_HEIGHT))
+                        (panel_x, 0, PANEL_WIDTH, WINDOW_HEIGHT))
 
         y_offset = 10
+
+        # --- Static world stats ---
         for line in stats_lines:
-            
             render_text = line
             if line.strip().startswith("Blobs:"):
                 render_text = f"  Blobs:        {len(blobs)}"
-            
-            color = (255,255,255)
+
+            color = (255, 255, 255)
             if render_text.endswith(":") or "info" in render_text:
-                color = (255,230,120)
-            
+                color = (255, 230, 120)
+
             text_surf = FONT.render(render_text, True, color)
             screen.blit(text_surf, (panel_x + 10, y_offset))
             y_offset += 20
+
+        # --- Oldest blob detailed info ---
+        if blobs:
+            oldest = max(blobs, key=lambda b: b.age)
+
+            y_offset += 10  # small gap
+
+            # header
+            header = FONT.render("Oldest blob:", True, (255, 230, 120))
+            screen.blit(header, (panel_x + 10, y_offset))
+            y_offset += 20
+
+            def bl(text):
+                nonlocal y_offset
+                surf = FONT.render(text, True, (255, 255, 255))
+                screen.blit(surf, (panel_x + 20, y_offset))
+                y_offset += 18
+
+            bl(f"Age:        {oldest.age:.1f}")
+            bl(f"HP:         {oldest.hp:.1f} / {oldest.max_hp}")
+            bl(f"Hunger:     {oldest.hunger:.1f}")
+            bl(f"Thirst:     {oldest.thirst:.1f}")
+            bl(f"Sight:      {oldest.sight:.2f} tiles")
+            bl(f"Speed base: {oldest.base_speed:.2f}")
+            bl(f"Strength:   {oldest.strength:.1f}")
+            bl(f"Intelligence:{oldest.intelligence}")
+
+            # --- Age distribution graphs ---
+            y_offset += 10  # small gap below stats
+
+            title = FONT.render("Age distribution:", True, (255, 230, 120))
+            screen.blit(title, (panel_x + 10, y_offset))
+            y_offset += 22
+
+            # Count blobs in each age bucket
+            young_count = sum(1 for b in blobs if b.age <= 20)
+            adult_count = sum(1 for b in blobs if 20 < b.age < 200)
+            elder_count = sum(1 for b in blobs if b.age >= 200)
+
+            max_count = max(1, young_count, adult_count, elder_count)
+            bar_max_width = PANEL_WIDTH - 40  # padding
+
+            def draw_age_bar(label, count, color):
+                nonlocal y_offset
+                # label with count
+                label_surf = FONT.render(f"{label}: {count}", True, (255, 255, 255))
+                screen.blit(label_surf, (panel_x + 20, y_offset))
+                y_offset += 18
+
+                # bar background
+                bg_rect = pygame.Rect(panel_x + 20, y_offset,
+                                    bar_max_width, 10)
+                pygame.draw.rect(screen, (60, 60, 80), bg_rect)
+
+                # bar value
+                if count > 0:
+                    w = int(bar_max_width * (count / max_count))
+                    bar_rect = pygame.Rect(panel_x + 20, y_offset, w, 10)
+                    pygame.draw.rect(screen, color, bar_rect)
+
+                y_offset += 18  # space after bar
+
+            # young (0–20): blue
+            draw_age_bar("0–20", young_count, (100, 200, 255))
+            # adult (20–200): gray
+            draw_age_bar("20–200", adult_count, (180, 180, 180))
+            # elder (200+): red
+            draw_age_bar("200+", elder_count, (255, 120, 120))
                 
 
         pygame.display.flip()
