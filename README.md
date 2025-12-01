@@ -291,7 +291,7 @@ All graphics created by **Dominik Wilczewski** — free to use with attribution.
 
 ---
 
-🚀 Development Roadmap Update – Godot Engine Migration
+# 🚀 Development Roadmap Update – Godot Engine Migration
 
 Starting from the next major version, all further development of B.L.O.B.S will continue in the Godot Engine.
 
