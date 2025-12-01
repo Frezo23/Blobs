@@ -12,9 +12,9 @@ DEBUG_PATHS = False
 # Basic world / view constants used by entities
 # (main file can import these instead of redefining)
 # -------------------------------------------------
+MAP_WIDTH = 60
+MAP_HEIGHT = 60
 TILE_SIZE = 32
-
-# Viewport size in tiles (used by BerryBush.draw culling)
 VIEW_TILES_X = 40
 VIEW_TILES_Y = 40
 
@@ -688,3 +688,20 @@ class Blob:
             wx_px = wx * TILE_SIZE - cam_x * TILE_SIZE + TILE_SIZE / 2
             wy_px = wy * TILE_SIZE - cam_y * TILE_SIZE + TILE_SIZE / 2
             pygame.draw.line(screen, (80, 80, 255), (cx, cy), (int(wx_px), int(wy_px)), 2)
+    
+def configure_from_world(map_width, map_height, tile_size, view_tiles_x, view_tiles_y):
+    """
+    Called once from blobs.py after reading config.yaml.
+    Keeps entity logic (movement, sight radii, drawing) in sync with config.
+    """
+    global MAP_WIDTH, MAP_HEIGHT, TILE_SIZE, VIEW_TILES_X, VIEW_TILES_Y
+
+    MAP_WIDTH = map_width
+    MAP_HEIGHT = map_height
+    TILE_SIZE = tile_size
+    VIEW_TILES_X = view_tiles_x
+    VIEW_TILES_Y = view_tiles_y
+
+    # Update Blob's class-level radii so all instances use the new tile size
+    Blob.EAT_RADIUS = TILE_SIZE * 0.4
+    Blob.DRINK_RADIUS = TILE_SIZE * 0.4

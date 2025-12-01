@@ -5,6 +5,7 @@ import yaml
 import pygame
 
 # --- local modules ---
+import entities
 from entities import Blob, BerryBush, Tree, Flower, Mushroom, SugarCane, Rock
 import rendering
 import side_panel
@@ -34,7 +35,7 @@ def main():
     world_cfg = cfg.get("world", {})
     ui_cfg = cfg.get("ui", {})
 
-    # world dimensions (must match entities/rendering for now)
+    # world dimensions
     MAP_WIDTH  = world_cfg.get("map_width", 60)
     MAP_HEIGHT = world_cfg.get("map_height", 60)
     TILE_SIZE  = world_cfg.get("tile_size", 32)
@@ -42,8 +43,8 @@ def main():
     VIEW_TILES_X = world_cfg.get("view_tiles_x", 40)
     VIEW_TILES_Y = world_cfg.get("view_tiles_y", 40)
 
-    PANEL_WIDTH       = world_cfg.get("panel_width", 260)
-    SCROLLBAR_THICK   = world_cfg.get("scrollbar_thickness", 16)
+    PANEL_WIDTH     = world_cfg.get("panel_width", 260)
+    SCROLLBAR_THICK = world_cfg.get("scrollbar_thickness", 16)
 
     VIEW_WIDTH  = VIEW_TILES_X * TILE_SIZE
     VIEW_HEIGHT = VIEW_TILES_Y * TILE_SIZE
@@ -51,13 +52,21 @@ def main():
     WINDOW_WIDTH  = VIEW_WIDTH + SCROLLBAR_THICK + PANEL_WIDTH
     WINDOW_HEIGHT = VIEW_HEIGHT + SCROLLBAR_THICK
 
-    title = sim_cfg.get("window_title", "Blobs – B.L.O.B.S Simulation")
+    title      = sim_cfg.get("window_title", "Blobs – B.L.O.B.S Simulation")
     target_fps = sim_cfg.get("target_fps", 60)
 
-    # If you want deterministic worlds, set simulation.random_seed or noise.seed in config
     random_seed = sim_cfg.get("random_seed", None)
     if random_seed is not None:
         random.seed(random_seed)
+
+    # >>> SYNC entities with config <<<
+    entities.configure_from_world(
+        map_width=MAP_WIDTH,
+        map_height=MAP_HEIGHT,
+        tile_size=TILE_SIZE,
+        view_tiles_x=VIEW_TILES_X,
+        view_tiles_y=VIEW_TILES_Y,
+    )
 
     # ---------- PYGAME INIT ----------
     pygame.init()
@@ -96,11 +105,15 @@ def main():
     SUGAR_CANE_IMAGE = rendering.load_sprite("tiles/sugar_cane_1.png", TILE_SIZE)
     ROCK_IMAGE       = rendering.load_sprite("tiles/rock_1.png", TILE_SIZE)
 
-    # Blob animation frames (scaled to TILE_SIZE)
-    BLOB_FRAMES = [
-        rendering.load_sprite("tiles/Blob_1.png", TILE_SIZE),  # idle
-        rendering.load_sprite("tiles/Blob_2.png", TILE_SIZE),  # arms up
-    ]
+    # Custom Blob graphics (exported from Inkscape)
+    blob_idle = pygame.image.load("tiles/blob_1.png").convert_alpha()
+    blob_walk = pygame.image.load("tiles/blob_1.png").convert_alpha()
+
+    # Rescale to simulation tile size
+    blob_idle = pygame.transform.smoothscale(blob_idle, (TILE_SIZE, TILE_SIZE))
+    blob_walk = pygame.transform.smoothscale(blob_walk, (TILE_SIZE, TILE_SIZE))
+
+    BLOB_FRAMES = [blob_idle, blob_walk]
 
     # Tree is 2 tiles tall
     tree_raw = pygame.image.load("tiles/tree.png").convert_alpha()
