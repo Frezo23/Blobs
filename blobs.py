@@ -86,10 +86,10 @@ def main():
         rendering.WATER:         rendering.load_tile("tiles/water.png",         TILE_SIZE),
         rendering.DEEP_WATER:    rendering.load_tile("tiles/deep_water.png",    TILE_SIZE),
         rendering.SAND:          rendering.load_tile("tiles/sand.png",          TILE_SIZE),
-        rendering.GRASS:         rendering.load_tile("tiles/grass.png",         TILE_SIZE),
+        # Note: GRASS is NOT in this dict anymore - we use GrassTileManager
         rendering.FOREST:        rendering.load_tile("tiles/forest.png",        TILE_SIZE),
     }
-
+    
     BERRY_BUSH_IMAGES = [
         rendering.load_sprite("tiles/berry_bush_0.png", TILE_SIZE),
         rendering.load_sprite("tiles/berry_bush_1.png", TILE_SIZE),
@@ -135,6 +135,14 @@ def main():
         ]
         for y in range(MAP_HEIGHT)
     ]
+    
+    # ---------- CREATE GRASS MANAGER ----------
+    grass_manager = rendering.GrassTileManager(TILE_SIZE)
+    grass_manager.load_variants("tiles/grass", count=4)
+    
+    # Create deterministic grass map using noise seed
+    noise_seed = cfg.get("noise", {}).get("seed", rendering.NOISE_SEED)
+    grass_manager.create_grass_map(tile_map, seed=noise_seed)
 
     flat_tiles = [t for row in tile_map for t in row]
 
@@ -374,6 +382,7 @@ def main():
         rendering.draw_world(
             screen=screen,
             tile_map=tile_map,
+            grass_tile_manager=grass_manager,  # NEW parameter
             cam_x=cam_x,
             cam_y=cam_y,
             view_tiles_x=VIEW_TILES_X,
