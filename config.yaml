@@ -1,0 +1,163 @@
+simulation:
+  target_fps: 60          # logic & render FPS
+  window_title: "Blobs – B.L.O.B.S Simulation"
+  random_seed: null       # null = random; or set e.g. 12345 for deterministic runs
+
+world:
+  map_width: 60           # MAP_WIDTH (in tiles)
+  map_height: 60          # MAP_HEIGHT (in tiles)
+  tile_size: 32           # TILE_SIZE (pixels)
+
+  # How many tiles are visible at once (viewport, not entire map)
+  view_tiles_x: 40
+  view_tiles_y: 40
+
+  panel_width: 260        # right side stats panel
+  scrollbar_thickness: 16
+
+noise:
+  scale: 20.0             # NOISE_SCALE
+  octaves: 4              # NOISE_OCTAVES
+  persistence: 0.5        # NOISE_PERSISTENCE
+  lacunarity: 2.0         # NOISE_LACUNARITY
+  seed: null              # null = random.randint(0,9999); or set a fixed seed
+
+spawning:
+  bushes:
+    grass_prob: 0.08      # grass tiles
+    forest_prob: 0.08     # forest tiles
+
+  flowers:
+    grass_prob: 0.10      # grass tiles; both flower types use this
+
+  sugar_cane:
+    near_shallow_water_prob: 0.20  # on grass or sand next to SHALLOW_WATER
+
+  rocks:
+    grass_sand_prob: 0.05  # on grass/sand
+    forest_prob: 0.10      # in forest
+
+  trees:
+    forest_prob: 0.60      # forest tiles
+
+  mushrooms:
+    forest_prob: 0.30      # forest tiles
+
+  blobs:
+    grass_sand_prob: 0.01  # initial spawn chance per grass/sand tile
+    forest_prob: 0.01      # initial spawn chance per forest tile
+
+blobs:
+  # ---- base stat ranges at spawn ----
+  intelligence_range: [1, 100]
+  strength_range: [1, 100]
+  base_speed_range: [0.5, 3.0]     # in "tiles per second" multiplier
+  base_sight_range: [4.0, 10.0]    # in tiles
+
+  # ---- needs decay / growth ----
+  hunger_rate: 2.0                 # per second, 0–100
+  thirst_rate: 4.0                 # per second, 0–100
+
+  # HP effects from needs
+  hunger_hurt_threshold: 80.0      # if hunger > this -> HP drain
+  thirst_hurt_threshold: 85.0      # if thirst > this -> HP drain
+  hunger_heal_threshold: 20.0      # if hunger < this -> HP regen
+  thirst_heal_threshold: 20.0      # if thirst < this -> HP regen
+
+  # Movement / strength modifiers from needs
+  severe_hunger_speed_mult: 0.6667   # 1/1.5 when hunger high
+  severe_hunger_strength_mult: 0.5
+  severe_thirst_speed_mult: 0.6667
+  severe_thirst_strength_mult: 0.5
+
+  well_fed_speed_mult: 1.1
+  well_fed_strength_mult: 2.0
+  well_hydrated_speed_mult: 1.1
+  well_hydrated_strength_mult: 2.0
+
+  low_hp_sight_mult: 0.5           # sight penalty when HP < 40
+
+  # ---- ageing ----
+  adulthood_age: 20.0              # ADULT_AGE (in "seconds" of sim)
+  mid_age_range: [100.0, 200.0]    # mild penalties
+  old_age_threshold: 200.0         # strong penalties start
+  max_age_range: [180.0, 260.0]    # random lifespan if not overridden
+
+  mid_age_modifiers:
+    speed_mult: 0.85
+    strength_mult: 0.9
+    sight_mult: 0.8
+
+  old_age_modifiers:
+    speed_mult: 0.6
+    strength_mult: 0.7
+    sight_mult: 0.5
+    hp_drain_per_sec: 0.2          # extra drain at high age
+
+  old_age_max_hp_drain_per_sec: 1.0 # when age >= max_age
+
+  # ---- eating / drinking effects ----
+  eat:
+    hunger_reduction: 60.0
+    hp_gain: 20.0
+    action_time: 1.0               # seconds to finish harvesting
+
+  drink:
+    thirst_reduction: 70.0
+    hp_gain: 10.0
+    action_time: 1.0               # seconds to finish drinking
+
+  # ---- perception ----
+  sight_debug_circle: false        # DEBUG_SIGHT
+  path_debug_lines: false          # DEBUG_PATHS
+
+reproduction:
+  enabled: true
+
+  # Age requirement
+  adult_age: 20.0                  # must be >= this to reproduce
+
+  # Minimum condition to try mating
+  min_hp_fraction: 0.7             # HP > 70% of max
+  max_hunger: 50.0                 # hunger < 50
+  max_thirst: 50.0                 # thirst < 50
+
+  # Probability of successful child creation per *second*
+  pair_chance_per_second: 0.05     # when standing next to valid mate
+
+  # Cooldowns
+  parent_cooldown: 45.0            # seconds after breeding
+  baby_initial_cooldown: 60.0      # baby can't reproduce for this long
+
+  # Neighbourhood range for mating (in tiles)
+  mate_search_radius_tiles: 1      # 1 => 8-neighbourhood around self
+
+  # Genetic mixing (child = average + mutation)
+  mutation:
+    intelligence_mutation_range: [-3, 3]
+    strength_mutation_range: [-3, 3]
+    speed_mutation_range: [-0.15, 0.15]
+    sight_mutation_range: [-0.3, 0.3]
+    max_age_mutation_range: [-10.0, 10.0]
+
+ui:
+  show_age_distribution_graphs: true
+
+  # Colors as RGB triples (for future theming)
+  colors:
+    background: [0, 0, 0]
+    panel_background: [30, 30, 40]
+    scrollbar_bg: [60, 60, 80]
+    scrollbar_handle: [150, 150, 200]
+
+    text_normal: [255, 255, 255]
+    text_header: [255, 230, 120]
+
+    age_bar_young: [100, 200, 255]
+    age_bar_adult: [180, 180, 180]
+    age_bar_elder: [255, 120, 120]
+
+  # Age tint colors (must match your current visual style)
+  age_tints:
+    young_rgb: [100, 200, 255]
+    elder_rgb: [255, 120, 120]
