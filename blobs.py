@@ -139,10 +139,24 @@ def main():
     # ---------- CREATE GRASS MANAGER ----------
     grass_manager = rendering.GrassTileManager(TILE_SIZE)
     grass_manager.load_variants("tiles/grass", count=4)
-    
-    # Create deterministic grass map using noise seed
     noise_seed = cfg.get("noise", {}).get("seed", rendering.NOISE_SEED)
     grass_manager.create_grass_map(tile_map, seed=noise_seed)
+    
+    # Create FERTILITY MAP: True for grass_1 tiles, False for others
+    fertility_map = []
+    for y in range(MAP_HEIGHT):
+        row = []
+        for x in range(MAP_WIDTH):
+            # Check if this is a grass_1 tile
+            if tile_map[y][x] == rendering.GRASS:
+                # Get the grass variant for this position
+                variant = grass_manager.grass_map[y][x] if hasattr(grass_manager, 'grass_map') else 0
+                # Only grass_1 (variant 0) is fertile
+                is_fertile = (variant == 0)
+            else:
+                is_fertile = False
+            row.append(is_fertile)
+        fertility_map.append(row)
 
     flat_tiles = [t for row in tile_map for t in row]
 
@@ -196,59 +210,76 @@ def main():
         for x in range(MAP_WIDTH):
             tile = tile_map[y][x]
             pos = (x, y)
+            
+            # Check if this tile is fertile (grass_1)
+            is_fertile_tile = fertility_map[y][x] if tile == rendering.GRASS else False
 
             # ------ GRASS OR SAND TILE ------
             if tile in (rendering.GRASS, rendering.SAND):
-
-                # BUSHES (grass only)
+                
+                # BUSHES (only on fertile grass_1 tiles)
                 if tile == rendering.GRASS:
-                    if pos not in occupied and random.random() < bushes_grass_prob:
+                    if (is_fertile_tile and  # ONLY SPAWN ON GRASS_1
+                        pos not in occupied and 
+                        random.random() < bushes_grass_prob):
                         bushes.append(BerryBush(x, y))
                         occupied.add(pos)
 
-                # FLOWERS (grass only)
+                # FLOWERS (only on fertile grass_1 tiles)
                 if tile == rendering.GRASS:
-                    if pos not in occupied and random.random() < flowers_grass_prob:
+                    if (is_fertile_tile and  # ONLY SPAWN ON GRASS_1
+                        pos not in occupied and 
+                        random.random() < flowers_grass_prob):
                         kind_index = random.randint(0, 1)
                         img = FLOWER_IMAGES[kind_index]
                         flowers.append(Flower(x, y, img, kind_index))
                         flower_type_counts[kind_index] += 1
                         occupied.add(pos)
 
-                # SUGAR CANE – can spawn on GRASS or SAND next to SHALLOW_WATER
-                if pos not in occupied and is_next_to_shallow_water(x, y) and random.random() < sugar_cane_prob:
-                    sugarcanes.append(SugarCane(x, y, SUGAR_CANE_IMAGE))
-                    occupied.add(pos)
+                # SUGAR CANE – only on fertile tiles next to SHALLOW_WATER
+                if (pos not in occupied and 
+                    is_next_to_shallow_water(x, y) and 
+                    random.random() < sugar_cane_prob):
+                    
+                    # Check if the tile is fertile (grass_1) OR sand
+                    # Sugar cane can spawn on sand OR grass_1
+                    if tile == rendering.SAND or is_fertile_tile:
+                        sugarcanes.append(SugarCane(x, y, SUGAR_CANE_IMAGE))
+                        occupied.add(pos)
 
-                # ROCKS – can spawn on GRASS or SAND
+                # ROCKS – can spawn on grass_1 or sand
                 if pos not in occupied and random.random() < rocks_grass_sand_prob:
-                    rocks.append(Rock(x, y, ROCK_IMAGE))
-                    occupied.add(pos)
-
-                # BLOBS - can spawn on grass and sand
+                    # Rocks can spawn on sand OR grass_1
+                    if tile == rendering.SAND or is_fertile_tile:
+                        rocks.append(Rock(x, y, ROCK_IMAGE))
+                        occupied.add(pos)
+                
+                # BLOBS - can spawn on grass_1 or sand
                 if pos not in occupied and random.random() < blobs_grass_sand_prob:
-                    blobs.append(Blob(x, y, BLOB_FRAMES))
-                    occupied.add(pos)
+                    # Blobs can spawn on sand OR grass_1
+                    if tile == rendering.SAND or is_fertile_tile:
+                        blobs.append(Blob(x, y, BLOB_FRAMES))
+                        occupied.add(pos)
 
             # ------ FOREST TILE ------
             elif tile == rendering.FOREST:
-
-                # TREES
+                # Note: Forest doesn't use grass variants, so we don't check fertility_map
+                # TREES (forest only, no grass variant restriction)
                 if pos not in occupied and random.random() < trees_forest_prob:
                     trees.append(Tree(x, y, TREE_IMAGE))
                     occupied.add(pos)
 
-                # MUSHROOMS
+                # MUSHROOMS (forest only)
                 if pos not in occupied and random.random() < mushrooms_forest_prob:
                     mushrooms.append(Mushroom(x, y, MUSHROOM_IMAGE))
                     occupied.add(pos)
 
-                # ROCKS – can spawn in forest too
+                # ROCKS – can spawn in forest
                 if pos not in occupied and random.random() < rocks_forest_prob:
                     rocks.append(Rock(x, y, ROCK_IMAGE))
                     occupied.add(pos)
 
-                # BUSHES in forest
+                # BUSHES in forest (no grass variant restriction)
                 if pos not in occupied and random.random() < bushes_forest_prob:
                     bushes.append(BerryBush(x, y))
                     occupied.add(pos)

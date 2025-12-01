@@ -6,11 +6,11 @@ simulation:
 world:
   map_width: 60          # MAP_WIDTH (in tiles)
   map_height: 60          # MAP_HEIGHT (in tiles)
-  tile_size: 32          # TILE_SIZE (pixels)
+  tile_size: 64          # TILE_SIZE (pixels)
 
   # How many tiles are visible at once (viewport, not entire map)
-  view_tiles_x: 40
-  view_tiles_y: 40
+  view_tiles_x: 30
+  view_tiles_y: 30
 
   panel_width: 260        # right side stats panel
   scrollbar_thickness: 16
