@@ -290,3 +290,24 @@ This project is released under the **MIT License**.
 All graphics created by **Dominik Wilczewski** — free to use with attribution.
 
 ---
+
+🚀 Development Roadmap Update – Godot Engine Migration
+
+Starting from the next major version, all further development of B.L.O.B.S will continue in the Godot Engine.
+
+**Why the change?**
+
+Moving to Godot allows:
+
+✔ Smoother animations
+✔ Better performance for large worlds
+✔ Built-in scene system for creatures & tiles
+✔ Native UI tools
+✔ Pixel-perfect zooming & scaling
+✔ Easier export to Windows / Linux / Web
+✔ Much cleaner project structure for long-term growth
+
+Version **0.5.0** is the final major release of the **Python/Pygame** implementation.
+The project will continue as **B.L.O.B.S – Godot Edition**, keeping the same ecosystem and AI ideas but with a much more powerful engine behind it.
+
+Stay tuned for the first Godot-based release 🚀
